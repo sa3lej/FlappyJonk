@@ -123,6 +123,9 @@ func _ready() -> void:
 
 var _shot_dir := ""
 var _play_dir := ""
+var _cheat_pilot := false        # secret in-game autopilot (Cmd/Ctrl+Shift+A)
+var _pilot_flew := false         # piloted runs stay off the high-score list
+var pilot_label: Label
 
 func _run_play_sequence() -> void:
 	await get_tree().create_timer(0.6).timeout
@@ -851,6 +854,8 @@ func _start_game() -> void:
 	speed = run_base_speed
 	velocity_y = FLAP_VELOCITY
 	since_spawn = PIPE_SPACING
+	_pilot_flew = false
+	pilot_label.visible = false
 	head.position = Vector3(HEAD_X, 0, 0)
 	head.rotation = Vector3.ZERO
 	head.visible = true
@@ -873,8 +878,14 @@ func _die() -> void:
 	else:
 		final_label.text = "SCORE %d" % score
 	gameover_box.visible = true
+	pilot_label.visible = false
 	var qualifies := high_scores.size() < MAX_SCORES or score > int(high_scores.back().score)
-	if qualifies and score > 0:
+	if _pilot_flew:
+		# machines don't get on the family leaderboard
+		entering_name = false
+		name_row.visible = false
+		hint_label.text = "AUTOPILOT RUNS DON'T COUNT!"
+	elif qualifies and score > 0:
 		entering_name = true
 		name_row.visible = true
 		hint_label.text = "NEW HI-SCORE! TYPE YOUR NAME"
@@ -897,6 +908,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		# secret: Cmd/Ctrl+Shift+K wipes the high-score list
 		if event.keycode == KEY_K and event.shift_pressed and (event.meta_pressed or event.ctrl_pressed):
 			_clear_high_scores()
+			return
+		# secret: Cmd/Ctrl+Shift+A hands the controls to the autopilot
+		if event.keycode == KEY_A and event.shift_pressed and (event.meta_pressed or event.ctrl_pressed):
+			_cheat_pilot = not _cheat_pilot
+			_toast("AUTOPILOT ENGAGED" if _cheat_pilot else "AUTOPILOT OFF")
 			return
 		match event.keycode:
 			KEY_SPACE:
@@ -996,8 +1012,11 @@ func _process(delta: float) -> void:
 		return
 
 	# the pilot: aim for the center of the next gap, flap when the next
-	# split second would carry us below it (drives --shot and --play modes)
-	if _shot_dir != "" or _play_dir != "":
+	# split second would carry us below it (drives --shot/--play modes and
+	# the secret in-game cheat)
+	if _shot_dir != "" or _play_dir != "" or _cheat_pilot:
+		_pilot_flew = true
+		pilot_label.visible = _cheat_pilot and int(Time.get_ticks_msec() / 300) % 3 != 0
 		# a flap lifts ~1.7 units, so flapping every time we sink to
 		# (gap - 0.8) bounces us neatly through the middle of the gap.
 		# Once past a gap's plane, start lining up for the NEXT one right
@@ -1016,10 +1035,16 @@ func _process(delta: float) -> void:
 			if not b.is_empty():
 				if a.x < HEAD_X:
 					target = clamp(b.gap - 0.8, a.gap - 1.6, a.gap + 1.2)
-				elif b.gap > a.gap + 2.0:
-					# big climb coming — cross this gap riding its upper
-					# edge for a head start
-					target = a.gap + 0.1
+				else:
+					# pre-position for the next gap while crossing this one:
+					# big climb ahead → ride the top edge, big drop → hug
+					# the bottom, otherwise stay centered (that's where the
+					# bäärs are, and they're worth 3 points each)
+					var gap_delta: float = b.gap - a.gap
+					if gap_delta > 1.5:
+						target = a.gap + 0.1
+					elif gap_delta < -1.5:
+						target = a.gap - 1.5
 		if head.position.y < target and velocity_y < 0.0:
 			velocity_y = FLAP_VELOCITY
 			_flap_pulse = 1.0
@@ -1202,6 +1227,15 @@ func _build_ui() -> void:
 	score_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	score_label.position.y = 40
 	ui.add_child(score_label)
+
+	# blinking tell-tale for the secret autopilot — no silent cheating
+	pilot_label = _make_label(16, Color(1.0, 0.85, 0.3))
+	pilot_label.text = "AUTOPILOT"
+	pilot_label.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
+	pilot_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	pilot_label.position.y = 130
+	pilot_label.visible = false
+	ui.add_child(pilot_label)
 
 	# (the menu is the 3D retro title card — no 2D title UI needed)
 
