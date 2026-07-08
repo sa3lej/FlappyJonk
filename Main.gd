@@ -868,6 +868,13 @@ func _die() -> void:
 	if state != STATE_PLAY:
 		return
 	state = STATE_DEAD
+	if _play_dir != "":
+		# autopsy line for pilot tuning
+		var near := ""
+		for p in pipes:
+			if absf(p.x - HEAD_X) < 8.0:
+				near += " (dx=%.1f gap=%.1f)" % [p.x - HEAD_X, p.gap]
+		print("DEATH score=%d y=%.2f v=%.1f speed=%.1f%s" % [score, head.position.y, velocity_y, speed, near])
 	# the classic flappy death plunge: tumble off the bottom of the screen
 	var tw := create_tween().set_parallel(true)
 	tw.tween_property(head, "position:y", -12.0, 0.8).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
@@ -1017,35 +1024,59 @@ func _process(delta: float) -> void:
 	if _shot_dir != "" or _play_dir != "" or _cheat_pilot:
 		_pilot_flew = true
 		pilot_label.visible = _cheat_pilot and int(Time.get_ticks_msec() / 300) % 3 != 0
-		# a flap lifts ~1.7 units, so flapping every time we sink to
-		# (gap - 0.8) bounces us neatly through the middle of the gap.
-		# Once past a gap's plane, start lining up for the NEXT one right
-		# away — clamped so we never leave the current pipe's safe band.
+		# physics-aware pilot: always aim for the NEXT gap's center, and let
+		# two guards enforce the current pipe's safe band for exactly as
+		# long as its collision window can still touch us — hold a flap
+		# that would peak into the top pillar, force one if coasting would
+		# sink below the bottom before we are clear.
 		var a: Dictionary
 		var b: Dictionary
 		for i in range(pipes.size()):
-			if pipes[i].x > HEAD_X - (PIPE_RADIUS + HEAD_RADIUS + 0.3):
+			if pipes[i].x > HEAD_X - (PIPE_RADIUS + HEAD_RADIUS + 0.05):
 				a = pipes[i]
 				if i + 1 < pipes.size():
 					b = pipes[i + 1]
 				break
 		var target := -0.8
 		if not a.is_empty():
-			target = a.gap - 0.8
-			if not b.is_empty():
-				if a.x < HEAD_X:
-					target = clamp(b.gap - 0.8, a.gap - 1.6, a.gap + 1.2)
-				else:
-					# pre-position for the next gap while crossing this one:
-					# big climb ahead → ride the top edge, big drop → hug
-					# the bottom, otherwise stay centered (that's where the
-					# bäärs are, and they're worth 3 points each)
-					var gap_delta: float = b.gap - a.gap
-					if gap_delta > 1.5:
-						target = a.gap + 0.1
-					elif gap_delta < -1.5:
-						target = a.gap - 1.5
-		if head.position.y < target and velocity_y < 0.0:
+			target = (b.gap if not b.is_empty() else a.gap) - 0.8
+		var want: bool = head.position.y < target and velocity_y < 0.0
+		if not a.is_empty():
+			var dx: float = a.x - HEAD_X
+			var w := PIPE_RADIUS + HEAD_RADIUS + 0.05
+			if dx > w:
+				# approaching: bang-bang reachability. Flap at the last
+				# moment max climb (avg FLAP_VELOCITY/2) still reaches the
+				# band bottom by entry; hold once a flap's peak could no
+				# longer be dived off before entry.
+				var t_in: float = (dx - w) / speed
+				if velocity_y < 0.0 and head.position.y + 0.5 * FLAP_VELOCITY * t_in < a.gap - 1.5:
+					want = true
+				var t_fall: float = maxf(0.0, t_in - FLAP_VELOCITY / GRAVITY)
+				var drop: float = 0.5 * GRAVITY * t_fall * t_fall if t_fall < 0.73 else 5.8 - MAX_FALL * (t_fall - 0.73)
+				if want and head.position.y + 1.68 - drop > a.gap + 1.7:
+					want = false
+			elif dx > -w:
+				# inside the collision window: hard band rules
+				var t_e: float = (dx + w) / speed
+				var t_up: float = minf(t_e, FLAP_VELOCITY / GRAVITY)
+				var rise: float = FLAP_VELOCITY * t_up - 0.5 * GRAVITY * t_up * t_up
+				if want and head.position.y + rise > a.gap + 1.85:
+					want = false
+				if velocity_y < 0.0 and head.position.y < a.gap - 1.6:
+					# bounce off the band floor — unless we can coast out
+					# through what is left of the window before sinking
+					# under it (a full-height bounce here is what used to
+					# throw us into the NEXT pipe's top pillar)
+					var t1: float = maxf(0.0, (velocity_y - MAX_FALL) / GRAVITY)
+					var y_exit: float
+					if t_e <= t1:
+						y_exit = head.position.y + velocity_y * t_e - 0.5 * GRAVITY * t_e * t_e
+					else:
+						y_exit = head.position.y + velocity_y * t1 - 0.5 * GRAVITY * t1 * t1 + MAX_FALL * (t_e - t1)
+					if y_exit < a.gap - 1.85:
+						want = true
+		if want:
 			velocity_y = FLAP_VELOCITY
 			_flap_pulse = 1.0
 
