@@ -113,8 +113,32 @@ func _ready() -> void:
 	if idx != -1:
 		_shot_dir = uargs[idx + 1] if uargs.size() > idx + 1 else "/tmp"
 		_run_shot_sequence()
+	# `godot --path . -- --play <dir>` lets the pilot play a full run:
+	# it chases the pipe gaps for real, screenshots along the way, and
+	# prints the final score before quitting.
+	idx = uargs.find("--play")
+	if idx != -1:
+		_play_dir = uargs[idx + 1] if uargs.size() > idx + 1 else "/tmp"
+		_run_play_sequence()
 
 var _shot_dir := ""
+var _play_dir := ""
+
+func _run_play_sequence() -> void:
+	await get_tree().create_timer(0.6).timeout
+	_start_game()
+	var shots := 0
+	var t := 0.0
+	while state == STATE_PLAY and t < 180.0:
+		await get_tree().create_timer(0.5).timeout
+		t += 0.5
+		if fmod(t, 8.0) < 0.4 and shots < 16:
+			shots += 1
+			await _save_shot(_play_dir + "/play_%02d.png" % shots)
+	await get_tree().create_timer(0.6).timeout
+	await _save_shot(_play_dir + "/play_final.png")
+	print("PILOT_SCORE=%d BEERS=%d" % [score, _beer_count])
+	get_tree().quit()
 
 func _run_shot_sequence() -> void:
 	await get_tree().create_timer(1.5).timeout
@@ -971,10 +995,34 @@ func _process(delta: float) -> void:
 	if state != STATE_PLAY:
 		return
 
-	# autopilot for dev screenshot mode
-	if _shot_dir != "" and velocity_y < 0.0 and head.position.y < 0.5:
-		velocity_y = FLAP_VELOCITY
-		_flap_pulse = 1.0
+	# the pilot: aim for the center of the next gap, flap when the next
+	# split second would carry us below it (drives --shot and --play modes)
+	if _shot_dir != "" or _play_dir != "":
+		# a flap lifts ~1.7 units, so flapping every time we sink to
+		# (gap - 0.8) bounces us neatly through the middle of the gap.
+		# Once past a gap's plane, start lining up for the NEXT one right
+		# away — clamped so we never leave the current pipe's safe band.
+		var a: Dictionary
+		var b: Dictionary
+		for i in range(pipes.size()):
+			if pipes[i].x > HEAD_X - (PIPE_RADIUS + HEAD_RADIUS + 0.3):
+				a = pipes[i]
+				if i + 1 < pipes.size():
+					b = pipes[i + 1]
+				break
+		var target := -0.8
+		if not a.is_empty():
+			target = a.gap - 0.8
+			if not b.is_empty():
+				if a.x < HEAD_X:
+					target = clamp(b.gap - 0.8, a.gap - 1.6, a.gap + 1.2)
+				elif b.gap > a.gap + 2.0:
+					# big climb coming — cross this gap riding its upper
+					# edge for a head start
+					target = a.gap + 0.1
+		if head.position.y < target and velocity_y < 0.0:
+			velocity_y = FLAP_VELOCITY
+			_flap_pulse = 1.0
 
 	# arms flap on every flap — up fast, then settle
 	_flap_pulse = max(0.0, _flap_pulse - 3.2 * delta)
