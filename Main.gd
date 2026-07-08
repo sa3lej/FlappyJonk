@@ -444,63 +444,101 @@ var diff_label: Label3D
 var hiscore_label: Label3D
 var card_jonk: MeshInstance3D
 
-# Jonk as an NES sprite, drawn pixel by pixel: bald stud head, chunky black
-# glasses, beard, red dev shirt, jeans legs — and the bäär raised high.
-# One character = one pixel; keys map to colors in SPRITE_COLORS.
-const JONK_SPRITE := [
-	"................VVVVV...",
-	"................WWWWW...",
-	"................WWOWW...",
-	"................WOOOW...",
-	"................WWWWW...",
-	"................VVVVV...",
-	"........SSSS....SSSS....",
-	"........SSSS....SSSS....",
-	"......SSSSSSSS...SS.....",
-	"......SSSSSSSS...RR.....",
-	"....KKKKKKKKKKKK.RRR....",
-	"....KWWKKKKWWKKK.RRR....",
-	"....KWKKKKKWKKKK.RRR....",
-	"....KKKKKKKKKKKK.RRR....",
-	"......SSSSSSSS..RRR.....",
-	"......BBBBBBBB..RRR.....",
-	".....BBBBKKBBBB.RRR.....",
-	"......BBBBBBBB.RRR......",
-	".......BBBBBB..RR.......",
-	"......RRRRRRRRRRR.......",
-	".....RRRRRRRRRRRR.......",
-	"..RR.RRRWWWWRRRR........",
-	"..RR.RRRWWWWRRRR........",
-	"..SS.RRRRRRRRRRR........",
-	".....JJJJJJJJJJJ........",
-	".....JJJJ...JJJJ........",
-	".....JJJJ...JJJJ........",
-	".....JJJJ...JJJJ........",
-	"....JJJJJ...JJJJJ.......",
-]
 const SPRITE_COLORS := {
 	"S": Color(0.88, 0.73, 0.55),   # skin
 	"K": Color(0.05, 0.05, 0.06),   # glasses / mouth
 	"W": Color(0.95, 0.95, 0.95),   # eye white / can / shirt print
 	"B": Color(0.45, 0.25, 0.13),   # beard
 	"R": Color(0.82, 0.12, 0.12),   # shirt / sleeve
-	"J": Color(0.15, 0.30, 0.62),   # jeans
+	"J": Color(0.18, 0.33, 0.66),   # jeans
+	"H": Color(0.11, 0.21, 0.46),   # hip piece
 	"V": Color(0.75, 0.77, 0.80),   # can rims
 	"O": Color(0.96, 0.62, 0.11),   # the bäär bear
+	"Y": Color(0.94, 0.88, 0.76),   # the stud — its own piece, its own shine
 }
+
+func _rect(g: Array, x: int, y: int, w: int, h: int, ch: String) -> void:
+	for yy in range(y, y + h):
+		for xx in range(x, x + w):
+			if yy >= 0 and yy < g.size() and xx >= 0 and xx < g[yy].size():
+				g[yy][xx] = ch
+
+func _jonk_grid() -> Array:
+	# Jonk assembled from rectangles, the way LEGO intended. Everything that
+	# makes a minifig a minifig is in here: the stud on the bald head, the
+	# cylinder head, the trapezoid torso stepping wider toward the hips, the
+	# separate hip piece, the blocky split legs, and a real C-clamp hand.
+	var W := 40
+	var H := 44
+	var g := []
+	for y in range(H):
+		var row := []
+		row.resize(W)
+		row.fill(".")
+		g.append(row)
+
+	# — the bäär, raised high: inset rims give it a real can silhouette —
+	_rect(g, 27, 0, 6, 1, "V")
+	_rect(g, 26, 1, 8, 9, "W")
+	_rect(g, 27, 10, 6, 1, "V")
+	_rect(g, 28, 4, 4, 3, "O")
+	# right fist wrapping the can
+	_rect(g, 25, 9, 10, 4, "S")
+	# right arm: sleeve dropping from the fist to the shoulder
+	_rect(g, 27, 13, 4, 7, "R")
+
+	# — head: one stud, cylinder, printed face —
+	_rect(g, 14, 2, 6, 3, "Y")      # THE stud
+	_rect(g, 11, 5, 12, 10, "S")    # cylinder head
+	_rect(g, 11, 11, 2, 4, "B")     # sideburns
+	_rect(g, 21, 11, 2, 4, "B")
+	_rect(g, 9, 7, 16, 4, "K")      # glasses band, temples proud of the head
+	_rect(g, 11, 8, 4, 2, "W")      # left lens
+	_rect(g, 19, 8, 4, 2, "W")      # right lens
+	_rect(g, 13, 9, 2, 1, "K")      # pupils, looking at the beer
+	_rect(g, 19, 9, 2, 1, "K")
+	_rect(g, 12, 12, 10, 2, "B")    # mustache
+	_rect(g, 11, 13, 12, 4, "B")    # beard, hanging below the chin
+	_rect(g, 15, 14, 4, 1, "K")     # mouth
+
+	# — torso: trapezoid, stepping wider toward the hips —
+	_rect(g, 10, 17, 14, 4, "R")
+	_rect(g, 8, 21, 18, 4, "R")
+	_rect(g, 7, 25, 20, 4, "R")
+	_rect(g, 14, 21, 6, 1, "W")     # two lines of shirt print
+	_rect(g, 14, 23, 6, 1, "W")
+	# right shoulder mass merging into the raised sleeve
+	_rect(g, 24, 17, 7, 3, "R")
+	_rect(g, 9, 20, 1, 1, "R")      # plug the armpit seam
+
+	# — left arm down, ending in the iconic C-clamp —
+	_rect(g, 6, 17, 4, 3, "R")
+	_rect(g, 5, 20, 4, 3, "R")
+	_rect(g, 5, 23, 3, 1, "S")      # wrist peg
+	_rect(g, 2, 24, 5, 4, "S")      # hand block...
+	_rect(g, 3, 25, 2, 2, ".")      # ...bored hollow...
+	_rect(g, 2, 25, 1, 2, ".")      # ...and slotted open: a real C
+
+	# — hip piece + short blocky legs with the split, and feet —
+	_rect(g, 7, 29, 20, 2, "H")
+	_rect(g, 8, 31, 8, 9, "J")
+	_rect(g, 18, 31, 8, 9, "J")
+	_rect(g, 7, 40, 9, 3, "J")
+	_rect(g, 18, 40, 9, 3, "J")
+	return g
 
 func _build_jonk_sprite() -> MeshInstance3D:
 	# SNES-era pipeline: the 8-bit grid is upscaled 2x with the Scale2x/EPX
 	# algorithm (rounds the staircase corners), then auto-shaded — top-lit
 	# highlights, bottom shadows — and finally traced with a dark outline.
-	var h := JONK_SPRITE.size()
-	var w: int = JONK_SPRITE[0].length()
+	var grid := _jonk_grid()
+	var h := grid.size()
+	var w: int = grid[0].size()
 	var base := Image.create(w, h, false, Image.FORMAT_RGBA8)
 	base.fill(Color(0, 0, 0, 0))
 	for y in range(h):
-		var row: String = JONK_SPRITE[y]
 		for x in range(w):
-			var ch := row[x]
+			var ch: String = grid[y][x]
 			if SPRITE_COLORS.has(ch):
 				base.set_pixel(x, y, SPRITE_COLORS[ch])
 
@@ -556,7 +594,7 @@ func _build_jonk_sprite() -> MeshInstance3D:
 
 	var tex := ImageTexture.create_from_image(img)
 	var q := QuadMesh.new()
-	var px := 0.06                         # 2x pixels, same world size
+	var px := 0.0375                       # 2x pixels, same world size
 	q.size = Vector2(w2 * px, h2 * px)
 	var m := StandardMaterial3D.new()
 	m.albedo_texture = tex
@@ -642,7 +680,7 @@ func _build_retro_card() -> void:
 	# pixel-art LEGO-Jonk standing proudly ON his own logo, bäär raised
 	# high, leaning with the letters — nothing covers him up here
 	card_jonk = _build_jonk_sprite()
-	card_jonk.position = Vector3(-2.6, 4.22, 4.6)
+	card_jonk.position = Vector3(-2.6, 4.05, 4.6)
 	card_jonk.rotation_degrees = Vector3(0, 0, 5.0)
 
 func _mat_unshaded(color: Color) -> StandardMaterial3D:
