@@ -74,6 +74,8 @@ var entering_name := false
 var high_scores: Array = []
 
 var head: Node3D
+var cam: Camera3D
+var _shake := 0.0
 var flap_arm_l: Node3D
 var flap_arm_r: Node3D
 var _flap_pulse := 0.0
@@ -124,26 +126,51 @@ func _ready() -> void:
 		_run_restart_test()
 
 func _run_restart_test() -> void:
-	# regression test for the name-entry trap: after a qualifying death,
-	# ONE space press must save the name and restart the game
+	# regression tests for the game-over flow: gamepad name entry must
+	# work, and ONE press must always get you back into the game
 	await get_tree().create_timer(0.8).timeout
+
+	# phase 1: gamepad — spin up "B", lock in an "A", save, restart
 	_start_game()
 	await get_tree().create_timer(0.5).timeout
 	score = 999
 	_die()
 	await get_tree().create_timer(0.3).timeout
-	print("TEST entering_name=%s focus=%s" % [entering_name, name_edit.has_focus()])
+	_push_pad(JOY_BUTTON_DPAD_UP)
+	_push_pad(JOY_BUTTON_DPAD_UP)
+	_push_pad(JOY_BUTTON_A)
+	print("TEST pad_typed=%s" % name_edit.text)
+	_push_pad(JOY_BUTTON_START)
+	var pad_saved: bool = str(high_scores[0].name) == "BA" and not entering_name
+	_push_pad(JOY_BUTTON_A)
+	await get_tree().create_timer(0.2).timeout
+	var pad_restarts := state == STATE_PLAY
+
+	# phase 2: keyboard — space in the focused name field saves + restarts
+	score = 998
+	_die()
+	await get_tree().create_timer(0.5).timeout
+	var uargs := OS.get_cmdline_user_args()
+	var ti := uargs.find("--test-restart")
+	if ti + 1 < uargs.size() and not uargs[ti + 1].begins_with("--"):
+		await _save_shot(uargs[ti + 1] + "/test_confetti.png")
 	var ev := InputEventKey.new()
 	ev.keycode = KEY_SPACE
 	ev.physical_keycode = KEY_SPACE
 	ev.pressed = true
 	get_viewport().push_input(ev)
 	await get_tree().create_timer(0.3).timeout
-	print("TEST_RESULT one_space_restarts=%s" % (state == STATE_PLAY))
-	# scrub the fake score back out of the real save file
-	high_scores = high_scores.filter(func(e): return int(e.score) != 999)
+	print("TEST_RESULT pad_name_saved=%s pad_restarts=%s kbd_restarts=%s" % [pad_saved, pad_restarts, state == STATE_PLAY])
+	# scrub the fake scores back out of the real save file
+	high_scores = high_scores.filter(func(e): return int(e.score) < 900)
 	_write_scores()
 	get_tree().quit()
+
+func _push_pad(btn: int) -> void:
+	var e := InputEventJoypadButton.new()
+	e.button_index = btn
+	e.pressed = true
+	get_viewport().push_input(e)
 
 var _shot_dir := ""
 var _play_dir := ""
@@ -288,7 +315,7 @@ func _build_bayou() -> void:
 	astronaut = _photo_quad("res://astronaut_real.png", Vector2(1.15, 1.3), false, Vector3(-9.0, 2.5, -7))
 
 func _build_camera() -> void:
-	var cam := Camera3D.new()
+	cam = Camera3D.new()
 	cam.projection = Camera3D.PROJECTION_ORTHOGONAL
 	cam.size = CAM_SIZE
 	cam.position = Vector3(0, 0, 22)
@@ -895,6 +922,7 @@ func _die() -> void:
 	if state != STATE_PLAY:
 		return
 	state = STATE_DEAD
+	_shake = 0.8
 	if _play_dir != "":
 		# autopsy line for pilot tuning
 		var near := ""
@@ -922,9 +950,10 @@ func _die() -> void:
 	elif qualifies and score > 0:
 		entering_name = true
 		name_row.visible = true
-		hint_label.text = "NEW HI-SCORE! TYPE YOUR NAME"
+		hint_label.text = "NEW HI-SCORE! TYPE YOUR NAME\nPAD: DPAD+A/B · START SAVES"
 		name_edit.text = ""
 		name_edit.grab_focus()
+		_confetti()
 	else:
 		entering_name = false
 		name_row.visible = false
@@ -965,6 +994,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		_primary_action()
 	# game controllers (PlayStation etc.): any face button flaps, Options = fullscreen
 	elif event is InputEventJoypadButton and event.pressed:
+		# arcade-style name entry straight from the pad
+		if state == STATE_DEAD and entering_name:
+			_gamepad_name_input(event.button_index)
+			return
 		match event.button_index:
 			JOY_BUTTON_A, JOY_BUTTON_B, JOY_BUTTON_X, JOY_BUTTON_Y:
 				_primary_action()
@@ -974,6 +1007,28 @@ func _unhandled_input(event: InputEvent) -> void:
 				_nudge_difficulty(1)
 			JOY_BUTTON_START:
 				_toggle_fullscreen()
+
+const NAME_CHARS := "ABCDEFGHIJKLMNOPQRSTUVWXYZÅÄÖ0123456789"
+
+func _gamepad_name_input(btn: int) -> void:
+	# the classic arcade drill: d-pad up/down spins the letter, A locks it
+	# in and starts the next, B erases, START saves the name
+	var t := name_edit.text
+	match btn:
+		JOY_BUTTON_DPAD_UP, JOY_BUTTON_DPAD_DOWN:
+			var dir := 1 if btn == JOY_BUTTON_DPAD_UP else -1
+			if t.is_empty():
+				name_edit.text = "A"
+			else:
+				var i := NAME_CHARS.find(t[-1])
+				name_edit.text = t.left(t.length() - 1) + NAME_CHARS[wrapi(i + dir, 0, NAME_CHARS.length())]
+		JOY_BUTTON_A, JOY_BUTTON_DPAD_RIGHT:
+			if t.length() < name_edit.max_length:
+				name_edit.text = t + "A"
+		JOY_BUTTON_B, JOY_BUTTON_DPAD_LEFT:
+			name_edit.text = t.left(t.length() - 1)
+		JOY_BUTTON_START, JOY_BUTTON_Y, JOY_BUTTON_X:
+			_on_name_submitted()
 
 func _nudge_difficulty(dir: int) -> void:
 	if state != STATE_MENU:
@@ -1034,6 +1089,16 @@ func _process(delta: float) -> void:
 			c.position.y = randf_range(2.5, 6.5)
 
 	var tsec := Time.get_ticks_msec() / 1000.0
+
+	# death rattle: a short decaying camera shake
+	if _shake > 0.0:
+		_shake = maxf(0.0, _shake - delta * 1.6)
+		var s := _shake * _shake * 0.5
+		cam.h_offset = randf_range(-s, s)
+		cam.v_offset = randf_range(-s, s)
+	elif cam.h_offset != 0.0:
+		cam.h_offset = 0.0
+		cam.v_offset = 0.0
 
 	# the astronaut drifts weightlessly, tumbling ever so slowly
 	if astronaut != null:
@@ -1196,6 +1261,23 @@ func _collect_beer(p: Dictionary) -> void:
 	_beer_pop(Vector3(p.x, p.gap, 0.2))
 	p.beer.queue_free()
 	p.beer = null
+
+func _confetti() -> void:
+	# a rain of little LEGO-colored plates for a new high score
+	var colors := [
+		Color(0.82, 0.12, 0.12), Color(1.0, 0.8, 0.1), Color(0.2, 0.4, 0.9),
+		Color(0.2, 0.7, 0.3), Color(0.95, 0.95, 0.95), Color(0.95, 0.5, 0.1),
+	]
+	for i in range(44):
+		var m := _add(_box(Vector3(0.18, 0.28, 0.02)), _mat(colors[i % colors.size()], 0.5),
+			Vector3(randf_range(-4.5, 4.5), randf_range(8.5, 11.5), 6.0))
+		m.rotation_degrees = Vector3(randf() * 360.0, randf() * 360.0, randf() * 360.0)
+		var dur := randf_range(2.0, 3.4)
+		var tw := create_tween().set_parallel(true)
+		tw.tween_property(m, "position:y", -8.5, dur).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_SINE)
+		tw.tween_property(m, "position:x", m.position.x + randf_range(-1.6, 1.6), dur)
+		tw.tween_property(m, "rotation", Vector3(randf() * 14.0, randf() * 14.0, randf() * 14.0), dur)
+		tw.chain().tween_callback(m.queue_free)
 
 func _beer_pop(pos: Vector3) -> void:
 	# a quick burst of glowing motes that fly out and fade
