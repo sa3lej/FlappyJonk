@@ -46,7 +46,9 @@ const BEER_PICKUP_RADIUS := 1.15
 const BEER_CHANCE := 0.55         # chance a pipe gap also holds a beer can
 
 const SAVE_PATH := "user://highscores.json"
+const SETTINGS_PATH := "user://settings.json"
 const MAX_SCORES := 10
+const FLAP_SFX_PATH := "res://jonk_flap.wav"   # Jonk's voice memo, one per flap
 
 # difficulty select on the retro title card (NES style): gap size, base
 # scroll speed, ramp per point, speed cap
@@ -76,6 +78,9 @@ var high_scores: Array = []
 var head: Node3D
 var cam: Camera3D
 var _shake := 0.0
+var flap_sfx: AudioStreamPlayer
+var muted := false
+var card_snd_label: Label3D
 var flap_arm_l: Node3D
 var flap_arm_r: Node3D
 var _flap_pulse := 0.0
@@ -98,6 +103,8 @@ var hint_label: Label
 func _ready() -> void:
 	randomize()
 	_load_scores()
+	_load_settings()
+	_build_audio()
 	_build_environment()
 	_build_camera()
 	_build_lights()
@@ -211,6 +218,42 @@ func _run_shot_sequence() -> void:
 func _save_shot(path: String) -> void:
 	await RenderingServer.frame_post_draw
 	get_viewport().get_texture().get_image().save_png(path)
+
+func _build_audio() -> void:
+	# Jonk's own voice, loaded at runtime like every other asset here.
+	# Missing file = silent game, no drama.
+	flap_sfx = AudioStreamPlayer.new()
+	add_child(flap_sfx)
+	if FileAccess.file_exists(FLAP_SFX_PATH):
+		flap_sfx.stream = AudioStreamWAV.load_from_file(ProjectSettings.globalize_path(FLAP_SFX_PATH))
+	AudioServer.set_bus_mute(0, muted)
+
+func _flap() -> void:
+	velocity_y = FLAP_VELOCITY
+	_flap_pulse = 1.0
+	if flap_sfx.stream != null:
+		flap_sfx.play()   # retriggering cuts the previous cry — rapid-fire JONKs
+
+func _load_settings() -> void:
+	if not FileAccess.file_exists(SETTINGS_PATH):
+		return
+	var f := FileAccess.open(SETTINGS_PATH, FileAccess.READ)
+	var data = JSON.parse_string(f.get_as_text())
+	f.close()
+	if typeof(data) == TYPE_DICTIONARY:
+		muted = bool(data.get("muted", false))
+
+func _save_settings() -> void:
+	var f := FileAccess.open(SETTINGS_PATH, FileAccess.WRITE)
+	f.store_string(JSON.stringify({ "muted": muted }))
+	f.close()
+
+func _toggle_mute() -> void:
+	muted = not muted
+	AudioServer.set_bus_mute(0, muted)
+	_save_settings()
+	card_snd_label.visible = muted
+	_toast("SOUND OFF" if muted else "SOUND ON")
 
 func _build_environment() -> void:
 	var env := Environment.new()
@@ -790,7 +833,9 @@ func _build_retro_card() -> void:
 	_retro_label("(C) THE WALT JONK COMPANY", 16, 0.0145, green, Vector3(0, -4.4, 5.0))
 	_retro_label("PRODUCED BY LARS-ERIK LTD.", 16, 0.0145, green, Vector3(0, -5.0, 5.0))
 	_retro_label("BÄÄR U.S.A. INC", 16, 0.0145, green, Vector3(0, -5.6, 5.0))
-	_retro_label("SPACE / CLICK TO START   F = FULLSCREEN", 8, 0.016, Color(0.72, 0.78, 0.95), Vector3(0, -7.3, 5.0))
+	_retro_label("SPACE / CLICK TO START  F = FULLSCREEN  M = SOUND", 8, 0.0145, Color(0.72, 0.78, 0.95), Vector3(0, -7.3, 5.0))
+	card_snd_label = _retro_label("SOUND OFF", 8, 0.019, Color(0.95, 0.5, 0.4), Vector3(0, 6.35, 5.0))
+	card_snd_label.visible = muted
 
 	# pixel-art LEGO-Jonk standing proudly ON his own logo, bäär raised
 	# high, leaning with the letters — nothing covers him up here
@@ -903,7 +948,6 @@ func _start_game() -> void:
 	run_speed_per = DIFF_SPEED_PER[difficulty]
 	run_max_speed = DIFF_MAX_SPEED[difficulty]
 	speed = run_base_speed
-	velocity_y = FLAP_VELOCITY
 	since_spawn = PIPE_SPACING
 	_pilot_flew = false
 	pilot_label.visible = false
@@ -914,6 +958,7 @@ func _start_game() -> void:
 	head.rotation = Vector3.ZERO
 	head.visible = true
 	retro_root.visible = false
+	_flap()   # liftoff — with the war cry, of course
 	gameover_box.visible = false
 	score_label.visible = true
 	score_label.text = "0"
@@ -985,6 +1030,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				_nudge_difficulty(-1)
 			KEY_RIGHT:
 				_nudge_difficulty(1)
+			KEY_M:
+				_toggle_mute()
 			KEY_F, KEY_F11:
 				_toggle_fullscreen()
 			KEY_ESCAPE:
@@ -1045,8 +1092,7 @@ func _primary_action() -> void:
 		STATE_MENU:
 			_start_game()
 		STATE_PLAY:
-			velocity_y = FLAP_VELOCITY
-			_flap_pulse = 1.0
+			_flap()
 		STATE_DEAD:
 			if entering_name:
 				# don't swallow the press — bank the name (empty → JONK)
@@ -1184,8 +1230,7 @@ func _process(delta: float) -> void:
 					if y_exit < a.gap - 1.85:
 						want = true
 		if want:
-			velocity_y = FLAP_VELOCITY
-			_flap_pulse = 1.0
+			_flap()
 
 	# arms flap on every flap — up fast, then settle
 	_flap_pulse = max(0.0, _flap_pulse - 3.2 * delta)
