@@ -125,6 +125,9 @@ func _run_shot_sequence() -> void:
 	_start_game()
 	await get_tree().create_timer(3.2).timeout
 	await _save_shot(_shot_dir + "/shot_play.png")
+	_die()
+	await get_tree().create_timer(0.4).timeout
+	await _save_shot(_shot_dir + "/shot_gameover.png")
 	get_tree().quit()
 
 func _save_shot(path: String) -> void:
@@ -675,22 +678,16 @@ func _build_retro_card() -> void:
 	retro_root = Node3D.new()
 	add_child(retro_root)
 
-	# 16-bit sky: a vertical gradient instead of the NES's flat blue
-	var grad := Gradient.new()
-	grad.colors = PackedColorArray([
-		Color(0.05, 0.09, 0.42), Color(0.13, 0.23, 0.72), Color(0.30, 0.48, 0.95),
-	])
-	grad.offsets = PackedFloat32Array([0.0, 0.55, 1.0])
-	var grad_tex := GradientTexture2D.new()
-	grad_tex.gradient = grad
-	grad_tex.fill_from = Vector2(0, 0)
-	grad_tex.fill_to = Vector2(0, 1)
+	# the title floats in front of the real Milky Way — the live space
+	# scene (moon, rockets, drifting astronaut) IS the backdrop, with just
+	# a whisper of dark so the pixel text pops
 	var bg := QuadMesh.new()
 	bg.size = Vector2(60, 18)
-	var bg_mat := StandardMaterial3D.new()
-	bg_mat.albedo_texture = grad_tex
-	bg_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	_add(bg, bg_mat, Vector3(0, 0, 3), retro_root)
+	var tint := StandardMaterial3D.new()
+	tint.albedo_color = Color(0.01, 0.02, 0.06, 0.38)
+	tint.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	tint.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_add(bg, tint, Vector3(0, 0, 3), retro_root)
 
 	# the logo: fat tilted words with a beveled 16-bit look — golden
 	# highlight up-left, deep shadow down-right
@@ -715,19 +712,13 @@ func _build_retro_card() -> void:
 	_retro_label("(C) THE WALT JONK COMPANY", 16, 0.0145, green, Vector3(0, -4.4, 5.0))
 	_retro_label("PRODUCED BY LARS-ERIK LTD.", 16, 0.0145, green, Vector3(0, -5.0, 5.0))
 	_retro_label("BÄÄR U.S.A. INC", 16, 0.0145, green, Vector3(0, -5.6, 5.0))
-	_retro_label("SPACE / CLICK TO START   F = FULLSCREEN", 8, 0.016, Color(0.45, 0.53, 0.82), Vector3(0, -6.6, 5.0))
+	_retro_label("SPACE / CLICK TO START   F = FULLSCREEN", 8, 0.016, Color(0.72, 0.78, 0.95), Vector3(0, -7.3, 5.0))
 
 	# pixel-art LEGO-Jonk standing proudly ON his own logo, bäär raised
 	# high, leaning with the letters — nothing covers him up here
 	card_jonk = _build_jonk_sprite()
 	card_jonk.position = Vector3(-2.6, 3.87, 4.6)
 	card_jonk.rotation_degrees = Vector3(0, 0, 5.0)
-
-func _mat_unshaded(color: Color) -> StandardMaterial3D:
-	var m := StandardMaterial3D.new()
-	m.albedo_color = color
-	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	return m
 
 func _refresh_diff_label() -> void:
 	var parts := []
@@ -848,23 +839,27 @@ func _die() -> void:
 	if state != STATE_PLAY:
 		return
 	state = STATE_DEAD
+	# the classic flappy death plunge: tumble off the bottom of the screen
+	var tw := create_tween().set_parallel(true)
+	tw.tween_property(head, "position:y", -12.0, 0.8).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+	tw.tween_property(head, "rotation:z", -2.6, 0.8)
 	score_label.visible = false
 	if _beer_count > 0:
-		final_label.text = "SCORE  %d\n🍺 %d beers caught" % [score, _beer_count]
+		final_label.text = "SCORE %d\n%d BÄÄRS CAUGHT" % [score, _beer_count]
 	else:
-		final_label.text = "SCORE  %d" % score
+		final_label.text = "SCORE %d" % score
 	gameover_box.visible = true
 	var qualifies := high_scores.size() < MAX_SCORES or score > int(high_scores.back().score)
 	if qualifies and score > 0:
 		entering_name = true
 		name_row.visible = true
-		hint_label.text = "New high score! Enter your name:"
+		hint_label.text = "NEW HI-SCORE! TYPE YOUR NAME"
 		name_edit.text = ""
 		name_edit.grab_focus()
 	else:
 		entering_name = false
 		name_row.visible = false
-		hint_label.text = "SPACE / click to play again"
+		hint_label.text = "SPACE / CLICK TO PLAY AGAIN"
 	_refresh_scores_label(gameover_scores)
 
 var _beer_count := 0
@@ -935,7 +930,7 @@ func _on_name_submitted(_t := "") -> void:
 	_save_score(nm, score)
 	entering_name = false
 	name_row.visible = false
-	hint_label.text = "SPACE / click to play again"
+	hint_label.text = "SPACE / CLICK TO PLAY AGAIN"
 	_refresh_scores_label(gameover_scores)
 
 # ---------------------------------------------------------------------------
@@ -1104,10 +1099,10 @@ func _clear_high_scores() -> void:
 	_write_scores()
 	_refresh_scores_label(gameover_scores)
 	hiscore_label.text = "HI-SCORE  0"
-	_toast("HIGH SCORES CLEARED 🍺")
+	_toast("HIGH SCORES CLEARED")
 
 func _toast(msg: String) -> void:
-	var t := _make_label(38, Color(1.0, 0.9, 0.4))
+	var t := _make_label(24, Color(1.0, 0.9, 0.4))
 	t.text = msg
 	t.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 	t.grow_horizontal = Control.GROW_DIRECTION_BOTH
@@ -1126,7 +1121,7 @@ func _save_score(nm: String, sc: int) -> void:
 func _refresh_scores_label(label: Label, limit := MAX_SCORES) -> void:
 	if label == null:
 		return
-	var lines := ["— HIGH SCORES —"]
+	var lines := ["- HIGH SCORES -", ""]
 	var rank := 1
 	for e in high_scores:
 		if rank > limit:
@@ -1139,11 +1134,13 @@ func _refresh_scores_label(label: Label, limit := MAX_SCORES) -> void:
 # UI
 # ---------------------------------------------------------------------------
 func _make_label(size: int, color := Color.WHITE) -> Label:
+	# every UI label wears the title card's pixel font — one 16-bit look
 	var l := Label.new()
+	l.add_theme_font_override("font", retro_font)
 	l.add_theme_font_size_override("font_size", size)
 	l.add_theme_color_override("font_color", color)
-	l.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.6))
-	l.add_theme_constant_override("outline_size", 6)
+	l.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.7))
+	l.add_theme_constant_override("outline_size", 4)
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	return l
 
@@ -1152,7 +1149,7 @@ func _build_ui() -> void:
 	add_child(ui)
 
 	# live score (top center)
-	score_label = _make_label(96)
+	score_label = _make_label(56)
 	score_label.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
 	score_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	score_label.position.y = 40
@@ -1169,10 +1166,10 @@ func _build_ui() -> void:
 	gv.alignment = BoxContainer.ALIGNMENT_CENTER
 	gv.add_theme_constant_override("separation", 12)
 	gameover_box.add_child(gv)
-	gv.add_child(_center(_make_label(64, Color(1.0, 0.5, 0.4)), "GAME OVER"))
-	final_label = _make_label(40)
+	gv.add_child(_center(_make_label(40, Color(1.0, 0.45, 0.38)), "GAME OVER"))
+	final_label = _make_label(24)
 	gv.add_child(_center(final_label, "SCORE 0"))
-	gameover_scores = _make_label(24, Color(0.95, 0.97, 1.0))
+	gameover_scores = _make_label(16, Color(0.55, 0.76, 0.55))
 	gv.add_child(_center(gameover_scores, ""))
 
 	name_row = HBoxContainer.new()
@@ -1180,23 +1177,26 @@ func _build_ui() -> void:
 	name_edit = LineEdit.new()
 	name_edit.placeholder_text = "YOUR NAME"
 	name_edit.max_length = 10
-	name_edit.custom_minimum_size = Vector2(260, 48)
-	name_edit.add_theme_font_size_override("font_size", 26)
+	name_edit.custom_minimum_size = Vector2(280, 48)
+	name_edit.add_theme_font_override("font", retro_font)
+	name_edit.add_theme_font_size_override("font_size", 16)
 	name_edit.text_submitted.connect(_on_name_submitted)
 	var save_btn := Button.new()
 	save_btn.text = "SAVE"
-	save_btn.add_theme_font_size_override("font_size", 26)
+	save_btn.add_theme_font_override("font", retro_font)
+	save_btn.add_theme_font_size_override("font_size", 16)
 	save_btn.pressed.connect(_on_name_submitted)
 	name_row.add_child(name_edit)
 	name_row.add_child(save_btn)
 	gv.add_child(_center_control(name_row))
 
-	hint_label = _make_label(30, Color(0.8, 1.0, 0.85))
+	hint_label = _make_label(16, Color(0.8, 1.0, 0.85))
 	gv.add_child(_center(hint_label, ""))
 
 func _panel() -> Control:
+	# just enough dark for the text to pop — space stays the backdrop
 	var p := ColorRect.new()
-	p.color = Color(0.05, 0.07, 0.12, 0.45)
+	p.color = Color(0.02, 0.03, 0.08, 0.3)
 	p.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	return p
 
