@@ -120,6 +120,30 @@ func _ready() -> void:
 	if idx != -1:
 		_play_dir = uargs[idx + 1] if uargs.size() > idx + 1 else "/tmp"
 		_run_play_sequence()
+	if uargs.has("--test-restart"):
+		_run_restart_test()
+
+func _run_restart_test() -> void:
+	# regression test for the name-entry trap: after a qualifying death,
+	# ONE space press must save the name and restart the game
+	await get_tree().create_timer(0.8).timeout
+	_start_game()
+	await get_tree().create_timer(0.5).timeout
+	score = 999
+	_die()
+	await get_tree().create_timer(0.3).timeout
+	print("TEST entering_name=%s focus=%s" % [entering_name, name_edit.has_focus()])
+	var ev := InputEventKey.new()
+	ev.keycode = KEY_SPACE
+	ev.physical_keycode = KEY_SPACE
+	ev.pressed = true
+	get_viewport().push_input(ev)
+	await get_tree().create_timer(0.3).timeout
+	print("TEST_RESULT one_space_restarts=%s" % (state == STATE_PLAY))
+	# scrub the fake score back out of the real save file
+	high_scores = high_scores.filter(func(e): return int(e.score) != 999)
+	_write_scores()
+	get_tree().quit()
 
 var _shot_dir := ""
 var _play_dir := ""
@@ -856,6 +880,9 @@ func _start_game() -> void:
 	since_spawn = PIPE_SPACING
 	_pilot_flew = false
 	pilot_label.visible = false
+	# a still-running death plunge would drag the fresh run into the floor
+	if _death_tween != null and _death_tween.is_valid():
+		_death_tween.kill()
 	head.position = Vector3(HEAD_X, 0, 0)
 	head.rotation = Vector3.ZERO
 	head.visible = true
@@ -876,9 +903,9 @@ func _die() -> void:
 				near += " (dx=%.1f gap=%.1f)" % [p.x - HEAD_X, p.gap]
 		print("DEATH score=%d y=%.2f v=%.1f speed=%.1f%s" % [score, head.position.y, velocity_y, speed, near])
 	# the classic flappy death plunge: tumble off the bottom of the screen
-	var tw := create_tween().set_parallel(true)
-	tw.tween_property(head, "position:y", -12.0, 0.8).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
-	tw.tween_property(head, "rotation:z", -2.6, 0.8)
+	_death_tween = create_tween().set_parallel(true)
+	_death_tween.tween_property(head, "position:y", -12.0, 0.8).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+	_death_tween.tween_property(head, "rotation:z", -2.6, 0.8)
 	score_label.visible = false
 	if _beer_count > 0:
 		final_label.text = "SCORE %d\n%d BÄÄRS CAUGHT" % [score, _beer_count]
@@ -905,6 +932,7 @@ func _die() -> void:
 	_refresh_scores_label(gameover_scores)
 
 var _beer_count := 0
+var _death_tween: Tween
 var gameover_scores: Label
 
 # ---------------------------------------------------------------------------
@@ -966,19 +994,33 @@ func _primary_action() -> void:
 			_flap_pulse = 1.0
 		STATE_DEAD:
 			if entering_name:
-				return
+				# don't swallow the press — bank the name (empty → JONK)
+				# and get straight back into the game
+				_on_name_submitted()
 			_goto_menu()
 			_start_game()
 
 func _on_name_submitted(_t := "") -> void:
+	if not entering_name:
+		return  # already saved — no double entries from eager fingers
 	var nm := name_edit.text.strip_edges().to_upper()
 	if nm == "":
 		nm = FRIEND.name
 	_save_score(nm, score)
 	entering_name = false
 	name_row.visible = false
+	name_edit.release_focus()
 	hint_label.text = "SPACE / CLICK TO PLAY AGAIN"
 	_refresh_scores_label(gameover_scores)
+
+func _on_name_gui_input(event: InputEvent) -> void:
+	# arcade names don't have spaces — SPACE in the name field means
+	# "save and play again", so one press always restarts
+	if event is InputEventKey and event.pressed and event.keycode == KEY_SPACE:
+		name_edit.accept_event()
+		_on_name_submitted()
+		_goto_menu()
+		_start_game()
 
 # ---------------------------------------------------------------------------
 # MAIN LOOP
@@ -1294,6 +1336,7 @@ func _build_ui() -> void:
 	name_edit.add_theme_font_override("font", retro_font)
 	name_edit.add_theme_font_size_override("font_size", 16)
 	name_edit.text_submitted.connect(_on_name_submitted)
+	name_edit.gui_input.connect(_on_name_gui_input)
 	var save_btn := Button.new()
 	save_btn.text = "SAVE"
 	save_btn.add_theme_font_override("font", retro_font)
