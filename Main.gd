@@ -74,6 +74,9 @@ var entering_name := false
 var high_scores: Array = []
 
 var head: Node3D
+var flap_arm_l: Node3D
+var flap_arm_r: Node3D
+var _flap_pulse := 0.0
 var pipes: Array = []            # { root, x, gap, passed, beer }
 var clouds: Array = []
 var since_spawn := 0.0
@@ -383,10 +386,17 @@ func _build_torso(model: Node3D) -> void:
 	var red := _mat(Color(0.78, 0.09, 0.1), 0.45)
 	var hands := _mat(FRIEND.skin, 0.35)
 	_add(_box(Vector3(1.5, 1.15, 1.05)), red, Vector3(0, -1.95, 0), model)
-	# arm panels + hands
+	# arm panels + hands, hinged at the shoulders so they can flap
 	for x in [-0.82, 0.82]:
-		_add(_box(Vector3(0.16, 0.85, 0.65)), red, Vector3(x, -1.8, 0.05), model)
-		_add(_box(Vector3(0.2, 0.28, 0.28)), hands, Vector3(x, -2.32, 0.3), model)
+		var piv := Node3D.new()
+		piv.position = Vector3(x, -1.35, 0.05)
+		model.add_child(piv)
+		_add(_box(Vector3(0.16, 0.85, 0.65)), red, Vector3(0, -0.45, 0), piv)
+		_add(_box(Vector3(0.2, 0.28, 0.28)), hands, Vector3(0, -0.97, 0.25), piv)
+		if x < 0.0:
+			flap_arm_l = piv
+		else:
+			flap_arm_r = piv
 	# shirt print
 	var lbl := Label3D.new()
 	lbl.text = "HTML &\nCSS &\nJavaScript &\nWordPress"
@@ -455,6 +465,9 @@ const SPRITE_COLORS := {
 	"V": Color(0.75, 0.77, 0.80),   # can rims
 	"O": Color(0.96, 0.62, 0.11),   # the bäär bear
 	"Y": Color(0.94, 0.88, 0.76),   # the stud — its own piece, its own shine
+	"T": Color(0.96, 0.85, 0.68),   # plastic sheen on the head
+	"P": Color(0.97, 0.38, 0.33),   # plastic sheen on the shirt
+	"L": Color(0.36, 0.53, 0.86),   # plastic sheen on the legs / foot fronts
 }
 
 func _rect(g: Array, x: int, y: int, w: int, h: int, ch: String) -> void:
@@ -464,12 +477,15 @@ func _rect(g: Array, x: int, y: int, w: int, h: int, ch: String) -> void:
 				g[yy][xx] = ch
 
 func _jonk_grid() -> Array:
-	# Jonk assembled from rectangles, the way LEGO intended. Everything that
-	# makes a minifig a minifig is in here: the stud on the bald head, the
-	# cylinder head, the trapezoid torso stepping wider toward the hips, the
-	# separate hip piece, the blocky split legs, and a real C-clamp hand.
-	var W := 40
-	var H := 44
+	# Jonk assembled from rectangles, the way LEGO intended — proportions and
+	# part seams taken from the real minifig: big cylinder head with rounded
+	# corners and its stud, glasses with skin-and-eyes visible INSIDE the
+	# lenses, smoothly tapering trapezoid torso, arms separated from the
+	# torso by dark joint seams, C-clamp hands, hip piece bridging the split
+	# blocky legs, and bright foot fronts. Hand-placed plastic sheen patches
+	# (research: glossy material = small, focused specular highlights).
+	var W := 56
+	var H := 64
 	var g := []
 	for y in range(H):
 		var row := []
@@ -477,54 +493,78 @@ func _jonk_grid() -> Array:
 		row.fill(".")
 		g.append(row)
 
-	# — the bäär, raised high: inset rims give it a real can silhouette —
-	_rect(g, 27, 0, 6, 1, "V")
-	_rect(g, 26, 1, 8, 9, "W")
-	_rect(g, 27, 10, 6, 1, "V")
-	_rect(g, 28, 4, 4, 3, "O")
-	# right fist wrapping the can
-	_rect(g, 25, 9, 10, 4, "S")
-	# right arm: sleeve dropping from the fist to the shoulder
-	_rect(g, 27, 13, 4, 7, "R")
+	# — the bäär, raised high in the right fist —
+	_rect(g, 41, 0, 8, 1, "V")
+	_rect(g, 40, 1, 10, 7, "W")
+	_rect(g, 43, 3, 4, 3, "O")
+	_rect(g, 39, 8, 12, 5, "S")     # fist wrapping the can
+	_rect(g, 41, 13, 3, 2, "S")     # wrist peg
+	_rect(g, 40, 15, 5, 8, "R")     # raised sleeve
+	_rect(g, 38, 23, 7, 5, "R")     # shoulder — column 37 stays open: joint seam
 
-	# — head: one stud, cylinder, printed face —
-	_rect(g, 14, 2, 6, 3, "Y")      # THE stud
-	_rect(g, 11, 5, 12, 10, "S")    # cylinder head
-	_rect(g, 11, 11, 2, 4, "B")     # sideburns
-	_rect(g, 21, 11, 2, 4, "B")
-	_rect(g, 9, 7, 16, 4, "K")      # glasses band, temples proud of the head
-	_rect(g, 11, 8, 4, 2, "W")      # left lens
-	_rect(g, 19, 8, 4, 2, "W")      # right lens
-	_rect(g, 13, 9, 2, 1, "K")      # pupils, looking at the beer
-	_rect(g, 19, 9, 2, 1, "K")
-	_rect(g, 12, 12, 10, 2, "B")    # mustache
-	_rect(g, 11, 13, 12, 4, "B")    # beard, hanging below the chin
-	_rect(g, 15, 14, 4, 1, "K")     # mouth
+	# — head: stud on top, cylinder with rounded corners —
+	_rect(g, 23, 2, 6, 1, "Y")
+	_rect(g, 22, 3, 8, 3, "Y")
+	_rect(g, 19, 6, 14, 1, "S")
+	_rect(g, 18, 7, 16, 1, "S")
+	_rect(g, 17, 8, 18, 12, "S")
+	_rect(g, 18, 20, 16, 1, "S")
+	_rect(g, 19, 21, 14, 1, "S")
+	_rect(g, 19, 8, 2, 3, "T")      # sheen on the forehead
 
-	# — torso: trapezoid, stepping wider toward the hips —
-	_rect(g, 10, 17, 14, 4, "R")
-	_rect(g, 8, 21, 18, 4, "R")
-	_rect(g, 7, 25, 20, 4, "R")
-	_rect(g, 14, 21, 6, 1, "W")     # two lines of shirt print
-	_rect(g, 14, 23, 6, 1, "W")
-	# right shoulder mass merging into the raised sleeve
-	_rect(g, 24, 17, 7, 3, "R")
-	_rect(g, 9, 20, 1, 1, "R")      # plug the armpit seam
+	# — the glasses: frames around lenses you can see THROUGH —
+	for fx in [18, 27]:
+		_rect(g, fx, 10, 7, 1, "K")          # top of frame
+		_rect(g, fx, 16, 7, 1, "K")          # bottom of frame
+		_rect(g, fx, 11, 1, 5, "K")          # frame sides
+		_rect(g, fx + 6, 11, 1, 5, "K")
+	_rect(g, 25, 12, 2, 1, "K")     # bridge
+	_rect(g, 16, 11, 2, 1, "K")     # temples running to the ears
+	_rect(g, 34, 11, 2, 1, "K")
+	_rect(g, 20, 12, 2, 3, "K")     # eyes, on skin, inside the lenses
+	_rect(g, 29, 12, 2, 3, "K")
+	_rect(g, 20, 12, 1, 1, "W")     # eye glints
+	_rect(g, 29, 12, 1, 1, "W")
 
-	# — left arm down, ending in the iconic C-clamp —
-	_rect(g, 6, 17, 4, 3, "R")
-	_rect(g, 5, 20, 4, 3, "R")
-	_rect(g, 5, 23, 3, 1, "S")      # wrist peg
-	_rect(g, 2, 24, 5, 4, "S")      # hand block...
-	_rect(g, 3, 25, 2, 2, ".")      # ...bored hollow...
-	_rect(g, 2, 25, 1, 2, ".")      # ...and slotted open: a real C
+	# — beard wreath with the mouth showing through, like the real print —
+	_rect(g, 17, 14, 1, 5, "B")     # sideburns
+	_rect(g, 34, 14, 1, 5, "B")
+	_rect(g, 20, 17, 12, 2, "B")    # mustache
+	_rect(g, 18, 19, 16, 3, "B")    # beard ring
+	_rect(g, 20, 22, 12, 1, "B")    # chin hanging below the head
+	_rect(g, 23, 19, 6, 2, "S")     # mouth window in the beard
+	_rect(g, 24, 20, 4, 1, "K")     # the grin
 
-	# — hip piece + short blocky legs with the split, and feet —
-	_rect(g, 7, 29, 20, 2, "H")
-	_rect(g, 8, 31, 8, 9, "J")
-	_rect(g, 18, 31, 8, 9, "J")
-	_rect(g, 7, 40, 9, 3, "J")
-	_rect(g, 18, 40, 9, 3, "J")
+	# — torso: smooth trapezoid, shoulders clipped —
+	_rect(g, 15, 23, 22, 5, "R")
+	_rect(g, 14, 28, 24, 5, "R")
+	_rect(g, 13, 33, 26, 4, "R")
+	_rect(g, 12, 37, 28, 4, "R")
+	_rect(g, 15, 23, 1, 1, ".")
+	_rect(g, 36, 23, 1, 1, ".")
+	_rect(g, 16, 24, 3, 3, "P")     # sheen on the chest
+	_rect(g, 21, 28, 10, 2, "W")    # two lines of shirt print
+	_rect(g, 21, 32, 10, 2, "W")
+
+	# — left arm out, ending in the iconic open C-clamp —
+	_rect(g, 9, 23, 5, 5, "R")      # column 14 stays open: joint seam
+	_rect(g, 8, 28, 5, 5, "R")
+	_rect(g, 9, 33, 3, 2, "S")      # wrist peg
+	_rect(g, 5, 35, 8, 7, "S")      # hand block...
+	_rect(g, 7, 37, 3, 3, ".")      # ...bored hollow...
+	_rect(g, 5, 37, 2, 2, ".")      # ...slotted open: the C-clamp
+
+	# — hip piece bridging the legs, blocky legs, bright foot fronts —
+	_rect(g, 12, 41, 28, 2, "H")    # hip crossbar
+	_rect(g, 22, 43, 8, 2, "H")     # crotch block between the leg tops
+	_rect(g, 12, 43, 13, 14, "J")
+	_rect(g, 27, 43, 13, 14, "J")
+	_rect(g, 14, 45, 3, 3, "L")     # sheen on the thighs
+	_rect(g, 29, 45, 3, 3, "L")
+	_rect(g, 11, 57, 14, 6, "J")    # feet, a nudge wider than the legs
+	_rect(g, 27, 57, 14, 6, "J")
+	_rect(g, 11, 59, 14, 4, "L")    # bright foot fronts facing the camera
+	_rect(g, 27, 59, 14, 4, "L")
 	return g
 
 func _build_jonk_sprite() -> MeshInstance3D:
@@ -594,7 +634,7 @@ func _build_jonk_sprite() -> MeshInstance3D:
 
 	var tex := ImageTexture.create_from_image(img)
 	var q := QuadMesh.new()
-	var px := 0.0375                       # 2x pixels, same world size
+	var px := 0.023                        # 2x pixels, same world size
 	q.size = Vector2(w2 * px, h2 * px)
 	var m := StandardMaterial3D.new()
 	m.albedo_texture = tex
@@ -680,7 +720,7 @@ func _build_retro_card() -> void:
 	# pixel-art LEGO-Jonk standing proudly ON his own logo, bäär raised
 	# high, leaning with the letters — nothing covers him up here
 	card_jonk = _build_jonk_sprite()
-	card_jonk.position = Vector3(-2.6, 4.05, 4.6)
+	card_jonk.position = Vector3(-2.6, 3.87, 4.6)
 	card_jonk.rotation_degrees = Vector3(0, 0, 5.0)
 
 func _mat_unshaded(color: Color) -> StandardMaterial3D:
@@ -881,6 +921,7 @@ func _primary_action() -> void:
 			_start_game()
 		STATE_PLAY:
 			velocity_y = FLAP_VELOCITY
+			_flap_pulse = 1.0
 		STATE_DEAD:
 			if entering_name:
 				return
@@ -938,6 +979,13 @@ func _process(delta: float) -> void:
 	# autopilot for dev screenshot mode
 	if _shot_dir != "" and velocity_y < 0.0 and head.position.y < 0.5:
 		velocity_y = FLAP_VELOCITY
+		_flap_pulse = 1.0
+
+	# arms flap on every flap — up fast, then settle
+	_flap_pulse = max(0.0, _flap_pulse - 3.2 * delta)
+	var wing := sin(minf(_flap_pulse, 1.0) * PI) * 1.9
+	flap_arm_l.rotation.z = -wing
+	flap_arm_r.rotation.z = wing
 
 	speed = min(run_max_speed, run_base_speed + score * run_speed_per)
 
