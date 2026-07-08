@@ -60,11 +60,8 @@ const DIFF_MAX_SPEED := [9.5, 10.5, 11.8]
 # STATE
 # ---------------------------------------------------------------------------
 enum { STATE_MENU, STATE_PLAY, STATE_DEAD }
-enum { MENU_SHOW, MENU_CARD }    # menu phase: minifig show → 80s title card
 
 var state := STATE_MENU
-var menu_phase := MENU_SHOW
-var menu_phase_t := 0.0
 var difficulty := 1
 var pipe_gap: float = DIFF_GAP[1]
 var run_base_speed: float = DIFF_BASE_SPEED[1]
@@ -83,11 +80,9 @@ var since_spawn := 0.0
 
 # UI nodes
 var ui: CanvasLayer
-var title_box: Control
 var score_label: Label
 var gameover_box: Control
 var final_label: Label
-var scores_label: Label
 var name_row: Control
 var name_edit: LineEdit
 var hint_label: Label
@@ -105,7 +100,6 @@ func _ready() -> void:
 	_build_ground()
 	_build_bayou()
 	head = _build_head()
-	_build_intro_show()
 	_build_retro_card()
 	_build_ui()
 	_goto_menu()
@@ -122,14 +116,9 @@ var _shot_dir := ""
 func _run_shot_sequence() -> void:
 	await get_tree().create_timer(1.5).timeout
 	await _save_shot(_shot_dir + "/shot_menu.png")
-	# a couple more menu frames to catch the minifig mid-jump and on a rock
-	await get_tree().create_timer(0.45).timeout
+	# a second frame catches the other blink state of GAME START
+	await get_tree().create_timer(0.5).timeout
 	await _save_shot(_shot_dir + "/shot_menu2.png")
-	await get_tree().create_timer(0.7).timeout
-	await _save_shot(_shot_dir + "/shot_menu3.png")
-	# wait out the attract show — the 80s title card cuts in at CARD_AFTER
-	await get_tree().create_timer(5.6).timeout
-	await _save_shot(_shot_dir + "/shot_card.png")
 	_start_game()
 	await get_tree().create_timer(3.2).timeout
 	await _save_shot(_shot_dir + "/shot_play.png")
@@ -306,33 +295,6 @@ func _cyl(r: float, h: float) -> CylinderMesh:
 	c.radial_segments = 32
 	return c
 
-func _trapezoid(top_w: float, bot_w: float, h: float, top_d: float, bot_d: float) -> ArrayMesh:
-	# a box that tapers toward the top — the real minifig torso shape
-	# (2 studs wide at the hips, narrower at the shoulders)
-	var t := h / 2.0
-	var corners := [
-		Vector3(-top_w / 2, t, -top_d / 2), Vector3(top_w / 2, t, -top_d / 2),
-		Vector3(top_w / 2, t, top_d / 2), Vector3(-top_w / 2, t, top_d / 2),
-		Vector3(-bot_w / 2, -t, -bot_d / 2), Vector3(bot_w / 2, -t, -bot_d / 2),
-		Vector3(bot_w / 2, -t, bot_d / 2), Vector3(-bot_w / 2, -t, bot_d / 2),
-	]
-	var faces := [
-		[0, 1, 2, 3], [7, 6, 5, 4],  # top, bottom
-		[3, 2, 6, 7], [1, 0, 4, 5],  # front, back
-		[0, 3, 7, 4], [2, 1, 5, 6],  # left, right
-	]
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	for f in faces:
-		var a: Vector3 = corners[f[0]]
-		var b: Vector3 = corners[f[1]]
-		var c: Vector3 = corners[f[2]]
-		var d: Vector3 = corners[f[3]]
-		st.set_normal((d - a).cross(b - a).normalized())
-		st.add_vertex(a); st.add_vertex(b); st.add_vertex(c)
-		st.add_vertex(a); st.add_vertex(c); st.add_vertex(d)
-	return st.commit()
-
 var _tex_cache := {}
 
 func _photo_quad(res_path: String, size: Vector2, additive := false, pos := Vector3.ZERO, parent: Node = null) -> MeshInstance3D:
@@ -468,275 +430,144 @@ func _build_glasses(model: Node3D) -> void:
 	for x in [-0.86, 0.86]:
 		_add(_box(Vector3(0.14, 0.14, 1.7)), frame, Vector3(x, 0.5, 0.05), model)
 
-# ---------------------------------------------------------------------------
-# INTRO SHOW — Jonk as a complete classic LEGO minifigure, hopping between
-# dangerous space rocks on the title screen.
-#
-# Built to the real minifig blueprint (modeled in actual millimeters, then
-# scaled): 40 mm tall, head a Ø10.2 mm cylinder with one stud, trapezoid
-# torso (15.8 mm at the hips, narrower at the shoulders), arms with the
-# molded elbow bend, C-clamp hands whose outer diameter matches a stud on
-# 3.18 mm wrist pegs, a separate hip piece, and blocky legs with forward
-# feet that only swing at the hip — no knees, just like the real thing.
-# ---------------------------------------------------------------------------
-const MF_SCALE := 0.065          # mm → world units
-const JUMP_DUR := 0.85
-const JUMP_ARC := 1.1
-
-var intro_root: Node3D
-var minifig: Node3D
-var fig_arm_l: Node3D
-var fig_arm_r: Node3D
-var fig_leg_l: Node3D
-var fig_leg_r: Node3D
-var intro_rocks: Array = []      # { node, base_y, phase, top }
-
-var _on_rock := 0
-var _hop_dir := 1
-var _jumping := false
-var _jump_t := 0.0
-var _jump_from_pos := Vector3.ZERO
-var _face_dir := 1.0
-var _squash := 0.0
-
-func _build_intro_show() -> void:
-	intro_root = Node3D.new()
-	add_child(intro_root)
-	# a warm little spotlight so the star of the show pops out of the dusk
-	var spot := OmniLight3D.new()
-	spot.position = Vector3(0, -3.2, 5.0)
-	spot.omni_range = 10.0
-	spot.light_energy = 1.6
-	spot.light_color = Color(1.0, 0.92, 0.8)
-	intro_root.add_child(spot)
-	# three of the actual in-game obstacles — the nebula dust columns —
-	# rising from the lunar surface for Jonk to hop between
-	intro_rocks.append(_build_intro_pillar(-3.1, -5.3, 0))
-	intro_rocks.append(_build_intro_pillar(-0.05, -4.95, 1))
-	intro_rocks.append(_build_intro_pillar(3.0, -5.4, 2))
-	minifig = _build_minifig()
-	minifig.scale = Vector3.ONE * MF_SCALE
-	intro_root.add_child(minifig)
-	minifig.position = _stand_pos(0)
-
-func _build_intro_pillar(x: float, tip_y: float, seed_i: int) -> Dictionary:
-	# the very same Pillars of Creation photos the game throws at you,
-	# scaled down and planted in the regolith (bottoms run offscreen)
-	var w := 1.35 + 0.15 * (seed_i % 2)
-	var h := w * (13.0 / 2.4)
-	var tex := "res://pillar1_real.png" if (seed_i % 2 == 0) else "res://pillar2_real.png"
-	var quad := _photo_quad(tex, Vector2(w, h), false, Vector3(x, tip_y - h / 2.0 + 0.55, 1.5), intro_root)
-	# the photo has a sliver of transparent air above the tip — plant the feet
-	# a touch lower so they actually touch nebula, not vacuum
-	return { "node": quad, "base_y": quad.position.y, "phase": seed_i * 2.1, "top": h / 2.0 - 0.95 }
-
-func _stand_pos(i: int) -> Vector3:
-	var r: Dictionary = intro_rocks[i]
-	return r.node.position + Vector3(0, r.top, 0)
-
-func _build_minifig() -> Node3D:
-	# origin at the soles of the feet; everything in real minifig millimeters
-	var fig := Node3D.new()
-
-	var skin := _mat(FRIEND.skin, 0.35)
-	var red := _mat(Color(0.78, 0.09, 0.1), 0.45)
-	var jeans := _mat(Color(0.13, 0.27, 0.52), 0.5)
-	var jeans_dark := _mat(Color(0.10, 0.21, 0.42), 0.55)
-	var black := _mat(Color(0.05, 0.05, 0.06), 0.25)
-
-	# --- legs: blocky, forward feet, hinge only at the hip ---
-	fig_leg_l = _build_leg(fig, -1, jeans)
-	fig_leg_r = _build_leg(fig, 1, jeans)
-
-	# --- hip piece: crossbar the legs hang from + center block ---
-	_add(_box(Vector3(15.6, 2.8, 5.7)), jeans_dark, Vector3(0, 15.4, 0), fig)
-	_add(_box(Vector3(2.0, 3.4, 5.0)), jeans_dark, Vector3(0, 13.4, -0.2), fig)
-
-	# --- torso: the tapered brick with the red dev shirt ---
-	var torso_mat := _mat(Color(0.78, 0.09, 0.1), 0.45)
-	torso_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-	_add(_trapezoid(12.0, 15.5, 10.5, 5.6, 7.4), torso_mat, Vector3(0, 21.95, 0), fig)
-	var lbl := Label3D.new()
-	lbl.text = "HTML &\nCSS &\nJavaScript &\nWordPress"
-	lbl.font_size = 40
-	lbl.pixel_size = 0.042
-	lbl.position = Vector3(0, 22.0, 3.9)
-	fig.add_child(lbl)
-
-	# --- arms with molded elbow bend + C-clamp hands ---
-	fig_arm_l = _build_arm(fig, -1, red, skin)
-	fig_arm_r = _build_arm(fig, 1, red, skin)
-
-	# --- neck + head: cylinder, one stud, printed-style flat face ---
-	_add(_cyl(2.7, 1.8), red, Vector3(0, 28.0, 0), fig)
-	_add(_cyl(5.1, 8.5), skin, Vector3(0, 33.15, 0), fig)
-	_add(_cyl(2.4, 1.7), skin, Vector3(0, 38.2, 0), fig)  # the stud — bald as ever
-
-	# eyes: flat printed discs with a highlight (no 3D nose — faces are prints!)
-	for x in [-1.9, 1.9]:
-		var eye := _add(_cyl(0.85, 0.25), black, Vector3(x, 34.3, 4.78), fig)
-		eye.rotation_degrees = Vector3(90, 0, 0)
-		_add(_box(Vector3(0.35, 0.35, 0.15)), _mat(Color(0.95, 0.95, 0.97), 0.2), Vector3(x - 0.3, 34.55, 4.95), fig)
-
-	# the trademark oversized square glasses, proud of the face
-	var frame := _mat(Color(0.06, 0.06, 0.07), 0.2)
-	for x in [-2.05, 2.05]:
-		_add(_box(Vector3(4.3, 0.75, 0.75)), frame, Vector3(x, 36.05, 5.0), fig)
-		_add(_box(Vector3(4.3, 0.75, 0.75)), frame, Vector3(x, 32.55, 5.0), fig)
-		_add(_box(Vector3(0.75, 4.25, 0.75)), frame, Vector3(x - 1.8, 34.3, 5.0), fig)
-		_add(_box(Vector3(0.75, 4.25, 0.75)), frame, Vector3(x + 1.8, 34.3, 5.0), fig)
-	_add(_box(Vector3(1.2, 0.7, 0.7)), frame, Vector3(0, 34.9, 5.05), fig)
-	for x in [-4.9, 4.9]:
-		_add(_box(Vector3(0.6, 0.6, 7.5)), frame, Vector3(x, 35.2, 1.2), fig)
-
-	# the beard: wraps the chin and hangs below the head like the real piece
-	var beard := _mat(FRIEND.beard_color, 0.4)
-	var beard_dark := _mat(FRIEND.beard_color.darkened(0.3), 0.45)
-	_add(_box(Vector3(5.4, 1.3, 1.0)), beard_dark, Vector3(0, 31.4, 4.95), fig)   # mustache
-	_add(_box(Vector3(7.6, 3.8, 1.2)), beard, Vector3(0, 29.0, 4.55), fig)        # chin slab
-	_add(_box(Vector3(3.0, 0.9, 0.5)), _mat(Color(0.1, 0.07, 0.06), 0.5), Vector3(0, 29.6, 5.25), fig)  # mouth
-	for s in [-1, 1]:
-		var cheek := _add(_box(Vector3(1.5, 4.6, 1.3)), beard, Vector3(s * 3.2, 31.2, 4.05), fig)
-		cheek.rotation_degrees = Vector3(0, -s * 38, 0)
-
-	return fig
-
-func _build_leg(fig: Node3D, s: int, mat: Material) -> Node3D:
-	# pivot sits exactly on the hip crossbar, like the real hinge
-	var piv := Node3D.new()
-	piv.position = Vector3(s * 4.0, 12.5, 0)
-	fig.add_child(piv)
-	# rounded thigh top that turns under the crossbar
-	var thigh := _add(_cyl(3.7, 7.2), mat, Vector3.ZERO, piv)
-	thigh.rotation_degrees = Vector3(0, 0, 90)
-	# the leg block, then the foot jutting forward — heel flush with the calf
-	_add(_box(Vector3(7.3, 9.3, 5.4)), mat, Vector3(0, -4.7, 0), piv)
-	_add(_box(Vector3(7.3, 3.4, 8.6)), mat, Vector3(0, -10.8, 1.6), piv)
-	return piv
-
-func _build_arm(fig: Node3D, s: int, sleeve: Material, skin: Material) -> Node3D:
-	var piv := Node3D.new()
-	piv.position = Vector3(s * 6.4, 25.2, 0)
-	fig.add_child(piv)
-	_add(_sphere(2.6), sleeve, Vector3(s * 0.4, 0.3, 0), piv)          # shoulder boss
-	var upper := _add(_cyl(2.1, 5.4), sleeve, Vector3(s * 0.8, -2.6, 0), piv)
-	upper.rotation_degrees = Vector3(0, 0, s * 9)                       # slight outward flare
-	# the permanent molded forward bend at the elbow
-	var elbow := Node3D.new()
-	elbow.position = Vector3(s * 1.3, -5.2, 0.3)
-	elbow.rotation_degrees = Vector3(-30, 0, 0)
-	piv.add_child(elbow)
-	_add(_sphere(2.15), sleeve, Vector3.ZERO, elbow)
-	_add(_cyl(1.95, 4.6), sleeve, Vector3(0, -2.0, 0), elbow)
-	# the famous 3.18 mm wrist peg, hand-colored like the real part
-	_add(_cyl(1.59, 2.2), skin, Vector3(0, -4.9, 0), elbow)
-	var hand := _build_hand(FRIEND.skin)
-	hand.position = Vector3(0, -6.6, 0)
-	elbow.add_child(hand)
-	if s == 1:
-		# the right C-clamp grips a tiny "the bäär" can, of course
-		var can := Node3D.new()
-		can.position = Vector3(0, -6.6, 2.4)
-		can.rotation_degrees = Vector3(30, 0, 0)   # counter the elbow bend → upright
-		elbow.add_child(can)
-		_add(_cyl(2.1, 5.4), _mat(Color(0.93, 0.90, 0.83), 0.5, 0.0, true, 0.25), Vector3.ZERO, can)
-		_add(_cyl(1.85, 0.7), _mat(Color(0.75, 0.77, 0.80), 0.2, 0.95), Vector3(0, 2.9, 0), can)
-		_add(_cyl(2.15, 0.5), _mat(Color(0.75, 0.77, 0.80), 0.2, 0.95), Vector3(0, -2.8, 0), can)
-		var blob := _add(_sphere(1.1), _mat(Color(0.96, 0.62, 0.11), 0.55), Vector3(0, -0.4, 1.6), can)
-		blob.scale = Vector3(1.25, 1.0, 0.55)
-	return piv
-
-func _build_hand(color: Color) -> Node3D:
-	# the C-clamp: a ring with a slot, outer Ø the same as a stud — carved
-	# with CSG so the opening is a real gap you can see through
-	var hand := Node3D.new()
-	hand.rotation_degrees = Vector3(0, 0, 90)   # ring axis sideways, opening forward
-	var m := _mat(color, 0.35)
-	var ring := CSGCylinder3D.new()
-	ring.radius = 2.45
-	ring.height = 3.2
-	ring.sides = 20
-	ring.material = m
-	hand.add_child(ring)
-	var hole := CSGCylinder3D.new()
-	hole.operation = CSGShape3D.OPERATION_SUBTRACTION
-	hole.radius = 1.45
-	hole.height = 3.6
-	hole.sides = 16
-	hole.material = m
-	ring.add_child(hole)
-	var slot := CSGBox3D.new()
-	slot.operation = CSGShape3D.OPERATION_SUBTRACTION
-	slot.size = Vector3(2.2, 3.6, 2.4)
-	slot.position = Vector3(0, 0, 1.6)
-	slot.material = m
-	ring.add_child(slot)
-	return hand
-
-func _animate_intro(delta: float, tsec: float) -> void:
-	# the dust columns shimmer ever so slightly, like they do out there
-	for r in intro_rocks:
-		r.node.position.y = r.base_y + sin(tsec * 0.7 + r.phase) * 0.06
-
-	var air := 0.0
-	if _jumping:
-		_jump_t += delta / JUMP_DUR
-		var t: float = clamp(_jump_t, 0.0, 1.0)
-		var p := _jump_from_pos.lerp(_stand_pos(_jump_to), t)
-		p.y += sin(t * PI) * JUMP_ARC
-		minifig.position = p
-		air = sin(t * PI)
-		if _jump_t >= 1.0:
-			_jumping = false
-			_on_rock = _jump_to
-			_on_rock_timer = 0.0
-			_squash = 1.0
-	else:
-		_on_rock_timer += delta
-		minifig.position = _stand_pos(_on_rock)
-		if _on_rock_timer > 1.1:
-			_start_jump()
-
-	# face where he's headed — a 3/4 view so the glasses stay visible
-	minifig.rotation.y = lerp_angle(minifig.rotation.y, deg_to_rad(38.0 * _face_dir), 8.0 * delta)
-
-	# limbs: flung in flight (hip-hinge only!), relaxed sway on the rock
-	var sway := sin(tsec * 2.2) * 0.05
-	fig_arm_l.rotation.x = lerp(fig_arm_l.rotation.x, -2.5 * air + sway, 10.0 * delta)
-	fig_arm_r.rotation.x = lerp(fig_arm_r.rotation.x, -2.9 * air - sway, 10.0 * delta)
-	fig_leg_l.rotation.x = lerp(fig_leg_l.rotation.x, -0.85 * air, 10.0 * delta)
-	fig_leg_r.rotation.x = lerp(fig_leg_r.rotation.x, 0.45 * air, 10.0 * delta)
-
-	# landing squash-and-stretch
-	_squash = max(0.0, _squash - 3.5 * delta)
-	minifig.scale = MF_SCALE * Vector3(1.0 + 0.13 * _squash, 1.0 - 0.18 * _squash, 1.0 + 0.13 * _squash)
-
-var _jump_to := 0
-var _on_rock_timer := 0.0
-
-func _start_jump() -> void:
-	_jump_to = _on_rock + _hop_dir
-	if _jump_to < 0 or _jump_to >= intro_rocks.size():
-		_hop_dir = -_hop_dir
-		_jump_to = _on_rock + _hop_dir
-	_jump_from_pos = minifig.position
-	_face_dir = 1.0 if _stand_pos(_jump_to).x > minifig.position.x else -1.0
-	_jump_t = 0.0
-	_jumping = true
 
 # ---------------------------------------------------------------------------
-# THE 80s TITLE CARD — the intro show hard-cuts to a DuckTales-NES-style
-# screen: royal blue, fat tilted pixel logo with Jonk peeking over it (beer
+# THE 80s TITLE CARD — the menu IS a DuckTales-NES-style screen: royal blue,
+# fat tilted pixel logo with pixel-art LEGO-Jonk peeking over it (beer
 # raised, of course), blinking GAME START, a difficulty row that actually
 # works, and green corporate small print. Font: Press Start 2P (OFL).
 # ---------------------------------------------------------------------------
-const CARD_AFTER := 7.0          # seconds of minifig show before the card
-
 var retro_root: Node3D
 var retro_font: FontFile
 var start_label: Label3D
 var diff_label: Label3D
-var card_hand: Node3D
+var hiscore_label: Label3D
+var card_jonk: MeshInstance3D
+
+# Jonk as an NES sprite, drawn pixel by pixel: bald stud head, chunky black
+# glasses, beard, red dev shirt, jeans legs — and the bäär raised high.
+# One character = one pixel; keys map to colors in SPRITE_COLORS.
+const JONK_SPRITE := [
+	"................VVVVV...",
+	"................WWWWW...",
+	"................WWOWW...",
+	"................WOOOW...",
+	"................WWWWW...",
+	"................VVVVV...",
+	"........SSSS....SSSS....",
+	"........SSSS....SSSS....",
+	"......SSSSSSSS...SS.....",
+	"......SSSSSSSS...RR.....",
+	"....KKKKKKKKKKKK.RRR....",
+	"....KWWKKKKWWKKK.RRR....",
+	"....KWKKKKKWKKKK.RRR....",
+	"....KKKKKKKKKKKK.RRR....",
+	"......SSSSSSSS..RRR.....",
+	"......BBBBBBBB..RRR.....",
+	".....BBBBKKBBBB.RRR.....",
+	"......BBBBBBBB.RRR......",
+	".......BBBBBB..RR.......",
+	"......RRRRRRRRRRR.......",
+	".....RRRRRRRRRRRR.......",
+	"..RR.RRRWWWWRRRR........",
+	"..RR.RRRWWWWRRRR........",
+	"..SS.RRRRRRRRRRR........",
+	".....JJJJJJJJJJJ........",
+	".....JJJJ...JJJJ........",
+	".....JJJJ...JJJJ........",
+	".....JJJJ...JJJJ........",
+	"....JJJJJ...JJJJJ.......",
+]
+const SPRITE_COLORS := {
+	"S": Color(0.88, 0.73, 0.55),   # skin
+	"K": Color(0.05, 0.05, 0.06),   # glasses / mouth
+	"W": Color(0.95, 0.95, 0.95),   # eye white / can / shirt print
+	"B": Color(0.45, 0.25, 0.13),   # beard
+	"R": Color(0.82, 0.12, 0.12),   # shirt / sleeve
+	"J": Color(0.15, 0.30, 0.62),   # jeans
+	"V": Color(0.75, 0.77, 0.80),   # can rims
+	"O": Color(0.96, 0.62, 0.11),   # the bäär bear
+}
+
+func _build_jonk_sprite() -> MeshInstance3D:
+	# SNES-era pipeline: the 8-bit grid is upscaled 2x with the Scale2x/EPX
+	# algorithm (rounds the staircase corners), then auto-shaded — top-lit
+	# highlights, bottom shadows — and finally traced with a dark outline.
+	var h := JONK_SPRITE.size()
+	var w: int = JONK_SPRITE[0].length()
+	var base := Image.create(w, h, false, Image.FORMAT_RGBA8)
+	base.fill(Color(0, 0, 0, 0))
+	for y in range(h):
+		var row: String = JONK_SPRITE[y]
+		for x in range(w):
+			var ch := row[x]
+			if SPRITE_COLORS.has(ch):
+				base.set_pixel(x, y, SPRITE_COLORS[ch])
+
+	# --- Scale2x (EPX) ---
+	var w2 := w * 2
+	var h2 := h * 2
+	var img := Image.create(w2, h2, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	for y in range(h):
+		for x in range(w):
+			var p := base.get_pixel(x, y)
+			var a := base.get_pixel(x, y - 1) if y > 0 else Color(0, 0, 0, 0)
+			var d := base.get_pixel(x, y + 1) if y < h - 1 else Color(0, 0, 0, 0)
+			var c := base.get_pixel(x - 1, y) if x > 0 else Color(0, 0, 0, 0)
+			var b := base.get_pixel(x + 1, y) if x < w - 1 else Color(0, 0, 0, 0)
+			var e0 := a if (c == a and c != d and a != b) else p
+			var e1 := b if (a == b and a != c and b != d) else p
+			var e2 := c if (d == c and d != b and c != a) else p
+			var e3 := b if (b == d and b != a and d != c) else p
+			img.set_pixel(x * 2, y * 2, e0)
+			img.set_pixel(x * 2 + 1, y * 2, e1)
+			img.set_pixel(x * 2, y * 2 + 1, e2)
+			img.set_pixel(x * 2 + 1, y * 2 + 1, e3)
+
+	# --- auto-shading (light from the top-left) + outline ---
+	var flat := Image.new()
+	flat.copy_from(img)
+	var outline := Color(0.05, 0.04, 0.09)
+	for y in range(h2):
+		for x in range(w2):
+			var p := flat.get_pixel(x, y)
+			if p.a < 0.5:
+				# transparent pixel touching the figure becomes the outline
+				for n in [Vector2i(0, -1), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(1, 0)]:
+					var nx: int = x + n.x
+					var ny: int = y + n.y
+					if nx >= 0 and nx < w2 and ny >= 0 and ny < h2 and flat.get_pixel(nx, ny).a >= 0.5:
+						img.set_pixel(x, y, outline)
+						break
+				continue
+			var up_open := y == 0 or flat.get_pixel(x, y - 1).a < 0.5
+			var down_open := y == h2 - 1 or flat.get_pixel(x, y + 1).a < 0.5
+			var left_open := x == 0 or flat.get_pixel(x - 1, y).a < 0.5
+			var right_open := x == w2 - 1 or flat.get_pixel(x + 1, y).a < 0.5
+			if up_open:
+				img.set_pixel(x, y, p.lightened(0.35))
+			elif left_open:
+				img.set_pixel(x, y, p.lightened(0.15))
+			elif down_open:
+				img.set_pixel(x, y, p.darkened(0.3))
+			elif right_open:
+				img.set_pixel(x, y, p.darkened(0.12))
+
+	var tex := ImageTexture.create_from_image(img)
+	var q := QuadMesh.new()
+	var px := 0.06                         # 2x pixels, same world size
+	q.size = Vector2(w2 * px, h2 * px)
+	var m := StandardMaterial3D.new()
+	m.albedo_texture = tex
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
+	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	var mi := MeshInstance3D.new()
+	mi.mesh = q
+	mi.material_override = m
+	retro_root.add_child(mi)
+	return mi
 
 func _retro_label(txt: String, fs: int, pix: float, color: Color, pos: Vector3, tilt := 0.0, outline := 0) -> Label3D:
 	var l := Label3D.new()
@@ -766,51 +597,53 @@ func _build_retro_card() -> void:
 	retro_root = Node3D.new()
 	add_child(retro_root)
 
-	# the royal blue void, close to the camera so it swallows the whole scene
+	# 16-bit sky: a vertical gradient instead of the NES's flat blue
+	var grad := Gradient.new()
+	grad.colors = PackedColorArray([
+		Color(0.05, 0.09, 0.42), Color(0.13, 0.23, 0.72), Color(0.30, 0.48, 0.95),
+	])
+	grad.offsets = PackedFloat32Array([0.0, 0.55, 1.0])
+	var grad_tex := GradientTexture2D.new()
+	grad_tex.gradient = grad
+	grad_tex.fill_from = Vector2(0, 0)
+	grad_tex.fill_to = Vector2(0, 1)
 	var bg := QuadMesh.new()
 	bg.size = Vector2(60, 18)
-	_add(bg, _mat_unshaded(Color(0.13, 0.23, 0.72)), Vector3(0, 0, 3), retro_root)
+	var bg_mat := StandardMaterial3D.new()
+	bg_mat.albedo_texture = grad_tex
+	bg_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_add(bg, bg_mat, Vector3(0, 0, 3), retro_root)
 
-	# the logo: two fat tilted words with a hard drop shadow, NES-style
-	var shadow := Color(0.32, 0.13, 0.02)
-	var face := Color(0.87, 0.52, 0.10)
-	_retro_label("FLAPPY", 32, 0.037, shadow, Vector3(-0.51, 2.87, 4.9), 5.0)
-	_retro_label("FLAPPY", 32, 0.037, face, Vector3(-0.4, 3.0, 5.0), 5.0, 8)
-	_retro_label("JONK", 32, 0.05, shadow, Vector3(0.79, 1.22, 4.9), 5.0)
-	_retro_label("JONK", 32, 0.05, face, Vector3(0.9, 1.35, 5.0), 5.0, 8)
-	_retro_label("TM", 8, 0.028, Color(0.9, 0.9, 0.9), Vector3(4.05, 0.62, 5.0))
+	# the logo: fat tilted words with a beveled 16-bit look — golden
+	# highlight up-left, deep shadow down-right
+	var shadow := Color(0.30, 0.12, 0.02)
+	var hilite := Color(1.0, 0.82, 0.38)
+	var face := Color(0.89, 0.53, 0.10)
+	_retro_label("FLAPPY", 32, 0.037, shadow, Vector3(-0.29, 2.06, 4.85), 5.0)
+	_retro_label("FLAPPY", 32, 0.037, hilite, Vector3(-0.46, 2.27, 4.9), 5.0)
+	_retro_label("FLAPPY", 32, 0.037, face, Vector3(-0.4, 2.2, 5.0), 5.0, 8)
+	_retro_label("JONK", 32, 0.05, shadow, Vector3(1.01, 0.41, 4.85), 5.0)
+	_retro_label("JONK", 32, 0.05, hilite, Vector3(0.84, 0.62, 4.9), 5.0)
+	_retro_label("JONK", 32, 0.05, face, Vector3(0.9, 0.55, 5.0), 5.0, 8)
+	_retro_label("TM", 8, 0.028, Color(0.9, 0.9, 0.9), Vector3(4.05, -0.18, 5.0))
 
-	start_label = _retro_label("GAME START", 16, 0.022, Color(0.92, 0.92, 0.92), Vector3(0, -1.3, 5.0))
-	diff_label = _retro_label("", 16, 0.0165, Color(0.91, 0.55, 0.58), Vector3(0, -2.15, 5.0))
+	hiscore_label = _retro_label("HI-SCORE  0", 16, 0.017, Color(0.92, 0.92, 0.92), Vector3(0, 6.9, 5.0))
+	start_label = _retro_label("GAME START", 16, 0.022, Color(0.92, 0.92, 0.92), Vector3(0, -1.9, 5.0))
+	diff_label = _retro_label("", 16, 0.0165, Color(0.91, 0.55, 0.58), Vector3(0, -2.7, 5.0))
 	_refresh_diff_label()
-	_retro_label("< >  PICK YOUR POISON", 8, 0.019, Color(0.55, 0.62, 0.85), Vector3(0, -2.75, 5.0))
+	_retro_label("< >  PICK YOUR POISON", 8, 0.019, Color(0.55, 0.62, 0.85), Vector3(0, -3.3, 5.0))
 
 	var green := Color(0.55, 0.76, 0.55)
-	_retro_label("(C) THE WALT JONK COMPANY", 16, 0.0145, green, Vector3(0, -3.9, 5.0))
-	_retro_label("PRODUCED BY LARS-ERIK LTD.", 16, 0.0145, green, Vector3(0, -4.5, 5.0))
-	_retro_label("BÄÄR U.S.A. INC", 16, 0.0145, green, Vector3(0, -5.1, 5.0))
+	_retro_label("(C) THE WALT JONK COMPANY", 16, 0.0145, green, Vector3(0, -4.4, 5.0))
+	_retro_label("PRODUCED BY LARS-ERIK LTD.", 16, 0.0145, green, Vector3(0, -5.0, 5.0))
+	_retro_label("BÄÄR U.S.A. INC", 16, 0.0145, green, Vector3(0, -5.6, 5.0))
+	_retro_label("SPACE / CLICK TO START   F = FULLSCREEN", 8, 0.016, Color(0.45, 0.53, 0.82), Vector3(0, -6.6, 5.0))
 
-	# the raised C-clamp hand with the bäär, peeking over the logo beside
-	# the head — Scrooge has a top hat, Jonk has a beer
-	card_hand = Node3D.new()
-	card_hand.position = Vector3(-1.5, 3.85, 4.2)
-	card_hand.rotation_degrees = Vector3(0, 0, -18)
-	card_hand.scale = Vector3.ONE * 0.16
-	retro_root.add_child(card_hand)
-	var sleeve := _add(_cyl(2.4, 6.0), _mat(Color(0.78, 0.09, 0.1), 0.45), Vector3(0, -5.0, 0), card_hand)
-	sleeve.rotation_degrees = Vector3(0, 0, 0)
-	_add(_cyl(1.59, 2.2), _mat(FRIEND.skin, 0.35), Vector3(0, -1.6, 0), card_hand)
-	var hand := _build_hand(FRIEND.skin)
-	hand.position = Vector3(0, 0, 0)
-	card_hand.add_child(hand)
-	var can := Node3D.new()
-	can.position = Vector3(0, 0, 2.3)
-	card_hand.add_child(can)
-	_add(_cyl(2.1, 5.4), _mat(Color(0.93, 0.90, 0.83), 0.5, 0.0, true, 0.3), Vector3.ZERO, can)
-	_add(_cyl(1.85, 0.7), _mat(Color(0.75, 0.77, 0.80), 0.2, 0.95), Vector3(0, 2.9, 0), can)
-	_add(_cyl(2.15, 0.5), _mat(Color(0.75, 0.77, 0.80), 0.2, 0.95), Vector3(0, -2.8, 0), can)
-	var blob := _add(_sphere(1.1), _mat(Color(0.96, 0.62, 0.11), 0.55), Vector3(0, -0.4, 1.7), can)
-	blob.scale = Vector3(1.25, 1.0, 0.55)
+	# pixel-art LEGO-Jonk standing proudly ON his own logo, bäär raised
+	# high, leaning with the letters — nothing covers him up here
+	card_jonk = _build_jonk_sprite()
+	card_jonk.position = Vector3(-2.6, 4.22, 4.6)
+	card_jonk.rotation_degrees = Vector3(0, 0, 5.0)
 
 func _mat_unshaded(color: Color) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
@@ -824,24 +657,9 @@ func _refresh_diff_label() -> void:
 		parts.append(("*" + DIFF_NAMES[i]) if i == difficulty else DIFF_NAMES[i])
 	diff_label.text = "   ".join(parts)
 
-func _enter_card() -> void:
-	menu_phase = MENU_CARD
-	menu_phase_t = 0.0
-	intro_root.visible = false
-	title_box.visible = false
-	retro_root.visible = true
-	# the flappy head takes Scrooge's spot: peeking over the logo's top-left
-	head.visible = true
-	head.position = Vector3(-2.95, 3.65, 4.2)
-	head.rotation_degrees = Vector3(0, -30, 0)   # mostly face the camera
-	head.scale = Vector3.ONE * 1.15
-
-func _animate_card(delta: float, tsec: float) -> void:
-	# Scrooge-style idle bob for head and raised beer, blinking start prompt
-	head.position.y = 3.65 + sin(tsec * 2.3) * 0.1
-	head.rotation.z = sin(tsec * 1.7) * 0.05
-	card_hand.position.y = 3.85 + sin(tsec * 2.3 + 0.6) * 0.12
-	card_hand.rotation.z = deg_to_rad(-18) + sin(tsec * 2.3) * 0.08
+func _animate_card(_delta: float, tsec: float) -> void:
+	# Jonk stands perfectly still (he has a beer to hold) —
+	# only the start prompt blinks, NES-style
 	start_label.visible = int(tsec * 2.2) % 2 == 0
 
 # ---------------------------------------------------------------------------
@@ -916,21 +734,16 @@ func _clear_pipes() -> void:
 # ---------------------------------------------------------------------------
 func _goto_menu() -> void:
 	state = STATE_MENU
-	menu_phase = MENU_SHOW
-	menu_phase_t = 0.0
 	_clear_pipes()
 	velocity_y = 0.0
 	head.position = Vector3(HEAD_X, 0, 0)
 	head.rotation = Vector3.ZERO
-	head.scale = Vector3.ONE
-	head.visible = false           # the intro minifig takes the stage instead
-	intro_root.visible = true
-	retro_root.visible = false
-	title_box.visible = true
+	head.visible = false           # pixel-Jonk fronts the title card instead
+	retro_root.visible = true
 	gameover_box.visible = false
 	score_label.visible = false
-	# top 5 only on the menu — the minifig show needs its stage
-	_refresh_scores_label(scores_label, 5)
+	var top := int(high_scores[0].score) if high_scores.size() > 0 else 0
+	hiscore_label.text = "HI-SCORE  %d" % top
 
 func _start_game() -> void:
 	state = STATE_PLAY
@@ -947,11 +760,8 @@ func _start_game() -> void:
 	since_spawn = PIPE_SPACING
 	head.position = Vector3(HEAD_X, 0, 0)
 	head.rotation = Vector3.ZERO
-	head.scale = Vector3.ONE
 	head.visible = true
-	intro_root.visible = false
 	retro_root.visible = false
-	title_box.visible = false
 	gameover_box.visible = false
 	score_label.visible = true
 	score_label.text = "0"
@@ -1018,7 +828,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				_toggle_fullscreen()
 
 func _nudge_difficulty(dir: int) -> void:
-	if state != STATE_MENU or menu_phase != MENU_CARD:
+	if state != STATE_MENU:
 		return
 	difficulty = clampi(difficulty + dir, 0, DIFF_NAMES.size() - 1)
 	_refresh_diff_label()
@@ -1030,12 +840,7 @@ func _toggle_fullscreen() -> void:
 func _primary_action() -> void:
 	match state:
 		STATE_MENU:
-			# 80s flow: the attract show cuts to the title card first,
-			# GAME START on the card actually starts
-			if menu_phase == MENU_SHOW:
-				_enter_card()
-			else:
-				_start_game()
+			_start_game()
 		STATE_PLAY:
 			velocity_y = FLAP_VELOCITY
 		STATE_DEAD:
@@ -1086,13 +891,7 @@ func _process(delta: float) -> void:
 			rocket_flame.scale.y = 1.0 + sin(tsec * 22.0) * 0.25
 
 	if state == STATE_MENU:
-		menu_phase_t += delta
-		if menu_phase == MENU_SHOW:
-			_animate_intro(delta, tsec)
-			if menu_phase_t > CARD_AFTER:
-				_enter_card()
-		else:
-			_animate_card(delta, tsec)
+		_animate_card(delta, tsec)
 		return
 
 	if state != STATE_PLAY:
@@ -1217,8 +1016,8 @@ func _sort_scores() -> void:
 func _clear_high_scores() -> void:
 	high_scores = []
 	_write_scores()
-	_refresh_scores_label(scores_label)
 	_refresh_scores_label(gameover_scores)
+	hiscore_label.text = "HI-SCORE  0"
 	_toast("HIGH SCORES CLEARED 🍺")
 
 func _toast(msg: String) -> void:
@@ -1273,22 +1072,7 @@ func _build_ui() -> void:
 	score_label.position.y = 40
 	ui.add_child(score_label)
 
-	# --- title / menu ---
-	title_box = _panel()
-	# leave the bottom of the screen undimmed — that's the minifig's stage
-	title_box.offset_bottom = -380
-	ui.add_child(title_box)
-	var tv := VBoxContainer.new()
-	tv.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	tv.alignment = BoxContainer.ALIGNMENT_CENTER
-	tv.add_theme_constant_override("separation", 14)
-	title_box.add_child(tv)
-	tv.add_child(_center(_make_label(72, Color(1.0, 0.85, 0.3)), "FLAPPY %s" % FRIEND.name))
-	tv.add_child(_center(_make_label(30), "Flap through the pipes.\nCatch the beer cans! 🍺"))
-	scores_label = _make_label(26, Color(0.95, 0.97, 1.0))
-	tv.add_child(_center(scores_label, ""))
-	tv.add_child(_center(_make_label(34, Color(0.8, 1.0, 0.85)), "▶  SPACE / CLICK / 🎮 ✕ to start"))
-	tv.add_child(_center(_make_label(24, Color(0.75, 0.85, 0.95)), "F = fullscreen   ·   ESC = windowed"))
+	# (the menu is the 3D retro title card — no 2D title UI needed)
 
 	# --- game over ---
 	gameover_box = _panel()

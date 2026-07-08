@@ -55,9 +55,11 @@ The space theme uses real photographs:
 - **Ground rockets**: Soyuz TMA-02M (NASA/Carla Cioffi), New Shepard booster at
   Oshkosh (Wikimedia Commons), Falcon 9 CRS-2 on pad (SpaceX) — all subject-lifted
   with `tools/cutout.swift`.
-- **Obstacles**: Space Shuttle Discovery, STS-120 launch (NASA, public domain).
+- **Obstacles**: Pillars of Creation, JWST NIRCam (NASA, ESA, CSA, STScI).
 - **Astronaut**: Bruce McCandless II untethered EVA, 1984 (NASA, public domain).
 - **Earth**: "The Blue Marble", Apollo 17 (NASA, public domain).
+- **Title font**: "Press Start 2P" (`pixel_font.ttf`) — Cody "CodeMan38" Boisclair,
+  SIL Open Font License 1.1.
 
 If the game is ever published, keep these credits visible.
 
