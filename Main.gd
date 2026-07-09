@@ -85,6 +85,7 @@ var flap_sfx: AudioStreamPlayer
 var crash_sfx: AudioStreamPlayer
 var beer_sfx: AudioStreamPlayer
 var menu_music: AudioStreamPlayer
+var music_on := false            # title tune is opt-in: T toggles it
 var muted := false
 var card_snd_label: Label3D
 var flap_arm_l: Node3D
@@ -265,11 +266,21 @@ func _load_settings() -> void:
 	f.close()
 	if typeof(data) == TYPE_DICTIONARY:
 		muted = bool(data.get("muted", false))
+		music_on = bool(data.get("music_on", false))
 
 func _save_settings() -> void:
 	var f := FileAccess.open(SETTINGS_PATH, FileAccess.WRITE)
-	f.store_string(JSON.stringify({ "muted": muted }))
+	f.store_string(JSON.stringify({ "muted": muted, "music_on": music_on }))
 	f.close()
+
+func _toggle_music() -> void:
+	music_on = not music_on
+	_save_settings()
+	if music_on and state == STATE_MENU and menu_music.stream != null:
+		menu_music.play()
+	elif not music_on:
+		menu_music.stop()
+	_toast("MUSIC ON" if music_on else "MUSIC OFF")
 
 func _toggle_mute() -> void:
 	muted = not muted
@@ -615,6 +626,9 @@ const SPRITE_COLORS := {
 	"T": Color(0.96, 0.85, 0.68),   # plastic sheen on the head
 	"P": Color(0.97, 0.38, 0.33),   # plastic sheen on the shirt
 	"L": Color(0.36, 0.53, 0.86),   # plastic sheen on the legs / foot fronts
+	"C": Color(0.90, 0.85, 0.74),   # cream eye tiles, like the game head
+	"N": Color(0.78, 0.58, 0.38),   # the nose brick
+	"M": Color(0.30, 0.16, 0.08),   # mustache, darker than the beard
 }
 
 func _rect(g: Array, x: int, y: int, w: int, h: int, ch: String) -> void:
@@ -649,38 +663,44 @@ func _jonk_grid() -> Array:
 	_rect(g, 40, 15, 5, 8, "R")     # raised sleeve
 	_rect(g, 38, 23, 7, 5, "R")     # shoulder — column 37 stays open: joint seam
 
-	# — head: stud on top, cylinder with rounded corners —
-	_rect(g, 23, 2, 6, 1, "Y")
-	_rect(g, 22, 3, 8, 3, "Y")
-	_rect(g, 19, 6, 14, 1, "S")
-	_rect(g, 18, 7, 16, 1, "S")
-	_rect(g, 17, 8, 18, 12, "S")
-	_rect(g, 18, 20, 16, 1, "S")
-	_rect(g, 19, 21, 14, 1, "S")
-	_rect(g, 19, 8, 2, 3, "T")      # sheen on the forehead
+	# — head: the boxy BrickHeadz brick from the game, two pale studs up top —
+	_rect(g, 18, 2, 5, 2, "Y")
+	_rect(g, 29, 2, 5, 2, "Y")
+	_rect(g, 15, 4, 22, 19, "S")    # big square head brick — no cylinder here
+	_rect(g, 15, 4, 1, 1, ".")      # just a hint of corner chamfer
+	_rect(g, 36, 4, 1, 1, ".")
+	_rect(g, 17, 5, 3, 3, "T")      # plastic sheen
 
-	# — the glasses: frames around lenses you can see THROUGH —
-	for fx in [18, 27]:
-		_rect(g, fx, 10, 7, 1, "K")          # top of frame
-		_rect(g, fx, 16, 7, 1, "K")          # bottom of frame
-		_rect(g, fx, 11, 1, 5, "K")          # frame sides
-		_rect(g, fx + 6, 11, 1, 5, "K")
-	_rect(g, 25, 12, 2, 1, "K")     # bridge
-	_rect(g, 16, 11, 2, 1, "K")     # temples running to the ears
-	_rect(g, 34, 11, 2, 1, "K")
-	_rect(g, 20, 12, 2, 3, "K")     # eyes, on skin, inside the lenses
-	_rect(g, 29, 12, 2, 3, "K")
-	_rect(g, 20, 12, 1, 1, "W")     # eye glints
-	_rect(g, 29, 12, 1, 1, "W")
+	# — the trademark oversized square glasses, 2px-thick frames —
+	for fx in [14, 27]:
+		_rect(g, fx, 8, 11, 2, "K")          # top bar
+		_rect(g, fx, 15, 11, 2, "K")         # bottom bar
+		_rect(g, fx, 10, 2, 5, "K")          # frame sides
+		_rect(g, fx + 9, 10, 2, 5, "K")
+	_rect(g, 25, 10, 2, 2, "K")     # bridge
+	# cream eye tiles + big round eye discs + glints, like the game head
+	_rect(g, 16, 10, 7, 5, "C")
+	_rect(g, 29, 10, 7, 5, "C")
+	_rect(g, 18, 10, 4, 4, "K")
+	_rect(g, 31, 10, 4, 4, "K")
+	for c in [[18, 10], [21, 10], [18, 13], [21, 13], [31, 10], [34, 10], [31, 13], [34, 13]]:
+		_rect(g, c[0], c[1], 1, 1, "C")      # rounded eye corners
+	_rect(g, 19, 11, 1, 1, "W")     # glints
+	_rect(g, 32, 11, 1, 1, "W")
 
-	# — beard wreath with the mouth showing through, like the real print —
-	_rect(g, 17, 14, 1, 5, "B")     # sideburns
-	_rect(g, 34, 14, 1, 5, "B")
-	_rect(g, 20, 17, 12, 2, "B")    # mustache
-	_rect(g, 18, 19, 16, 3, "B")    # beard ring
-	_rect(g, 20, 22, 12, 1, "B")    # chin hanging below the head
-	_rect(g, 23, 19, 6, 2, "S")     # mouth window in the beard
-	_rect(g, 24, 20, 4, 1, "K")     # the grin
+	# — nose brick, mustache, mouth slot, jaw wrap wider than the head —
+	_rect(g, 12, 15, 3, 3, "S")     # ear plates sticking out, like the game head
+	_rect(g, 37, 15, 3, 3, "S")
+	_rect(g, 15, 15, 2, 6, "B")     # sideburn slabs
+	_rect(g, 35, 15, 2, 6, "B")
+	_rect(g, 17, 19, 18, 2, "M")    # mustache, dark
+	_rect(g, 24, 17, 4, 3, "N")     # the nose brick
+	_rect(g, 13, 21, 26, 2, "B")    # jaw wrap, clearly wider than the head
+	_rect(g, 17, 21, 2, 1, "M")     # drooping mustache ends
+	_rect(g, 33, 21, 2, 1, "M")
+	_rect(g, 15, 22, 4, 1, "M")     # dark brick-step accents in the beard
+	_rect(g, 33, 22, 4, 1, "M")
+	_rect(g, 23, 21, 6, 1, "K")     # mouth slot
 
 	# — torso: smooth trapezoid, shoulders clipped —
 	_rect(g, 15, 23, 22, 5, "R")
@@ -692,6 +712,9 @@ func _jonk_grid() -> Array:
 	_rect(g, 16, 24, 3, 3, "P")     # sheen on the chest
 	_rect(g, 21, 28, 10, 2, "W")    # two lines of shirt print
 	_rect(g, 21, 32, 10, 2, "W")
+	# stepped chin blocks hanging over the chest, like the game's beard
+	_rect(g, 18, 23, 16, 2, "B")
+	_rect(g, 22, 25, 8, 2, "M")
 
 	# — left arm out, ending in the iconic open C-clamp —
 	_rect(g, 9, 23, 5, 5, "R")      # column 14 stays open: joint seam
@@ -856,7 +879,7 @@ func _build_retro_card() -> void:
 	_retro_label("(C) THE WALT JONK COMPANY", 16, 0.0145, green, Vector3(0, -4.4, 5.0))
 	_retro_label("PRODUCED BY LARS-ERIK LTD.", 16, 0.0145, green, Vector3(0, -5.0, 5.0))
 	_retro_label("BÄÄR U.S.A. INC", 16, 0.0145, green, Vector3(0, -5.6, 5.0))
-	_retro_label("SPACE / CLICK TO START  F = FULLSCREEN  M = SOUND", 8, 0.0145, Color(0.72, 0.78, 0.95), Vector3(0, -7.3, 5.0))
+	_retro_label("SPACE / CLICK TO START  F = FULLSCREEN  M = SOUND  T = MUSIC", 8, 0.0125, Color(0.72, 0.78, 0.95), Vector3(0, -7.3, 5.0))
 	card_snd_label = _retro_label("SOUND OFF", 8, 0.019, Color(0.95, 0.5, 0.4), Vector3(0, 6.35, 5.0))
 	card_snd_label.visible = muted
 
@@ -959,7 +982,7 @@ func _goto_menu() -> void:
 	score_label.visible = false
 	var top := int(high_scores[0].score) if high_scores.size() > 0 else 0
 	hiscore_label.text = "HI-SCORE  %d" % top
-	if menu_music.stream != null and not menu_music.playing:
+	if music_on and menu_music.stream != null and not menu_music.playing:
 		menu_music.play()
 
 func _start_game() -> void:
@@ -1058,6 +1081,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				_nudge_difficulty(1)
 			KEY_M:
 				_toggle_mute()
+			KEY_T:
+				_toggle_music()
 			KEY_F, KEY_F11:
 				_toggle_fullscreen()
 			KEY_ESCAPE:
