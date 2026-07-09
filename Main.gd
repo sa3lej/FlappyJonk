@@ -1190,7 +1190,7 @@ func _on_name_submitted(_t := "") -> void:
 		return  # already saved — no double entries from eager fingers
 	var nm := name_edit.text.strip_edges().to_upper()
 	if nm == "":
-		nm = FRIEND.name
+		nm = "ANONYMOUS"   # Jonk doesn't get credit for other people's runs
 	_save_score(nm, score)
 	entering_name = false
 	name_row.visible = false
