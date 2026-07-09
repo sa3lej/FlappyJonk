@@ -141,7 +141,11 @@ func _ready() -> void:
 
 func _run_restart_test() -> void:
 	# regression tests for the game-over flow: gamepad name entry must
-	# work, and ONE press must always get you back into the game
+	# work, and ONE press must always get you back into the game.
+	# The REAL family leaderboard is snapshotted and fully restored —
+	# a filter scrub once let fake scores push real ones off the capped
+	# list and ate them permanently.
+	var scores_backup: Array = high_scores.duplicate(true)
 	await get_tree().create_timer(0.8).timeout
 
 	# phase 0: on the title card, Triangle toggles sound, Circle the melody
@@ -162,15 +166,17 @@ func _run_restart_test() -> void:
 	score = 999
 	_die()
 	await get_tree().create_timer(0.3).timeout
-	_push_pad(JOY_BUTTON_DPAD_UP)
-	_push_pad(JOY_BUTTON_DPAD_UP)    # "B", picked
-	_push_pad(JOY_BUTTON_A)          # lock it, auto "A" appears -> "BA"
-	print("TEST pad_typed=%s" % name_edit.text)
+	_push_pad(JOY_BUTTON_DPAD_UP)    # a letter appears: "A"
+	_push_pad(JOY_BUTTON_DPAD_UP)    # spun to "B"
+	_push_pad(JOY_BUTTON_A)          # X locks it — NOTHING new may appear
+	var no_ghost_a: bool = name_edit.text == "B"
+	print("TEST pad_typed=%s no_ghost_a=%s" % [name_edit.text, no_ghost_a])
 	var not_saved_by_x: bool = entering_name
-	_push_pad(JOY_BUTTON_DPAD_UP)    # pick the second letter -> "BB"
-	_push_pad(JOY_BUTTON_A)          # lock -> "BBA"
-	_push_pad(JOY_BUTTON_A)          # no letter picked -> drops slot, saves "BB"
-	var pad_saved: bool = str(high_scores[0].name) == "BB" and not entering_name and not_saved_by_x
+	_push_pad(JOY_BUTTON_DPAD_UP)    # second letter appears: "BA"
+	_push_pad(JOY_BUTTON_DPAD_UP)    # spun to "BB"
+	_push_pad(JOY_BUTTON_A)          # lock
+	_push_pad(JOY_BUTTON_A)          # nothing pending -> saves "BB"
+	var pad_saved: bool = str(high_scores[0].name) == "BB" and not entering_name and not_saved_by_x and no_ghost_a
 	_push_pad(JOY_BUTTON_A)          # and one more X starts the game
 	await get_tree().create_timer(0.2).timeout
 	var pad_restarts := state == STATE_PLAY
@@ -190,8 +196,8 @@ func _run_restart_test() -> void:
 	get_viewport().push_input(ev)
 	await get_tree().create_timer(0.3).timeout
 	print("TEST_RESULT pad_name_saved=%s pad_restarts=%s kbd_restarts=%s" % [pad_saved, pad_restarts, state == STATE_PLAY])
-	# scrub the fake scores back out of the real save file
-	high_scores = high_scores.filter(func(e): return int(e.score) < 900)
+	# put the family leaderboard back exactly as it was
+	high_scores = scores_backup
 	_write_scores()
 	get_tree().quit()
 
@@ -1048,9 +1054,9 @@ func _die() -> void:
 	elif qualifies and score > 0:
 		entering_name = true
 		name_row.visible = true
-		hint_label.text = "NEW HI-SCORE! TYPE YOUR NAME\nUP/DOWN = LETTER   X = NEXT\nX AGAIN = SAVE   CIRCLE = ERASE"
+		hint_label.text = "NEW HI-SCORE! TYPE YOUR NAME\nUP/DOWN = LETTER   X = LOCK\nX AGAIN = SAVE   CIRCLE = ERASE"
 		name_edit.text = ""
-		_pad_letter_touched = false
+		_pad_editing = false
 		name_edit.grab_focus()
 		_confetti()
 	else:
@@ -1129,42 +1135,31 @@ func _unhandled_input(event: InputEvent) -> void:
 
 const NAME_CHARS := "ABCDEFGHIJKLMNOPQRSTUVWXYZÅÄÖ0123456789"
 
-var _pad_letter_touched := false
+var _pad_editing := false        # a letter is being spun and isn't locked yet
 
 func _gamepad_name_input(btn: int) -> void:
-	# the arcade drill, PlayStation edition: d-pad up/down picks the
-	# letter, X locks it in and starts the next. Pressing X again WITHOUT
-	# picking a letter means you're done — the unused slot is dropped and
-	# the name saves. Circle erases. (Options also saves, quietly.)
+	# letters ONLY appear when you spin the d-pad. X locks the current
+	# letter (nothing new appears), and X with nothing unlocked SAVES —
+	# so X can never, ever conjure up an unwanted A. Circle erases.
 	var t := name_edit.text
 	match btn:
 		JOY_BUTTON_DPAD_UP, JOY_BUTTON_DPAD_DOWN:
-			var dir := 1 if btn == JOY_BUTTON_DPAD_UP else -1
-			if t.is_empty():
-				name_edit.text = "A"
-			else:
-				var i := NAME_CHARS.find(t[-1])
-				name_edit.text = t.left(t.length() - 1) + NAME_CHARS[wrapi(i + dir, 0, NAME_CHARS.length())]
-			_pad_letter_touched = true
-		JOY_BUTTON_A, JOY_BUTTON_X, JOY_BUTTON_Y, JOY_BUTTON_DPAD_RIGHT:
-			if t.is_empty():
-				name_edit.text = "A"
-				_pad_letter_touched = false
-			elif _pad_letter_touched:
+			if not _pad_editing:
 				if t.length() < name_edit.max_length:
 					name_edit.text = t + "A"
-					_pad_letter_touched = false
-				else:
-					_on_name_submitted()   # name is full — X saves it
+					_pad_editing = true
 			else:
-				# X twice with no letter picked: drop the unused slot, save
-				name_edit.text = t.left(t.length() - 1)
-				_on_name_submitted()
+				var dir := 1 if btn == JOY_BUTTON_DPAD_UP else -1
+				var i := NAME_CHARS.find(t[-1])
+				name_edit.text = t.left(t.length() - 1) + NAME_CHARS[wrapi(i + dir, 0, NAME_CHARS.length())]
+		JOY_BUTTON_A, JOY_BUTTON_X, JOY_BUTTON_Y, JOY_BUTTON_DPAD_RIGHT, JOY_BUTTON_START:
+			if _pad_editing:
+				_pad_editing = false           # letter locked in
+			else:
+				_on_name_submitted()           # nothing pending — save
 		JOY_BUTTON_B, JOY_BUTTON_DPAD_LEFT:
 			name_edit.text = t.left(t.length() - 1)
-			_pad_letter_touched = true
-		JOY_BUTTON_START:
-			_on_name_submitted()
+			_pad_editing = false
 
 func _nudge_difficulty(dir: int) -> void:
 	if state != STATE_MENU:
