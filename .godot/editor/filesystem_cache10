@@ -1,5 +1,5 @@
 9cad1ddce9e5a63143ba340c9520626b
-::res://::1783601981
+::res://::1783634119
 astronaut_real.png::CompressedTexture2D::8764138556975239614::1783452684::1783458191::1::::<><><>0<>0<>eed502c8890f3b2ddadae8366e7b4fc3<>res://.godot/imported/astronaut_real.png-815b77a4d03a876a6426f70533211911.ctex::
 beer.wav::AudioStreamWAV::6333255057985394426::1783595432::1783597885::1::::<><><>0<>0<>7cb07ac5249c3eb79a49db48d44bbe93<>res://.godot/imported/beer.wav-31831b5e3293b137e3cc8b85dd5ad307.sample::
 beer_real.png::CompressedTexture2D::4150778781651142340::1783600653::1783600716::1::::<><><>0<>0<>a03b6c0f02a80e0351b51a16721c00be<>res://.godot/imported/beer_real.png-29b0480d503bf8d102b87600f0f16d6a.ctex::
@@ -10,7 +10,7 @@ export_presets.cfg::TextFile::-1::1783598426::0::1::::<><><>0<>0<><>::
 FlappyJonk.icns::OtherFile::-1::1783448426::0::1::::<><><>0<>0<><>::
 icon.svg::CompressedTexture2D::4127222763453235992::1783448406::1783458190::1::::<><><>0<>0<>04362bbfbc59fc0fdc01d157b059edd5<>res://.godot/imported/icon.svg-218a8f2b3041327d8a5756f3a245f83b.ctex::
 jonk_flap.wav::AudioStreamWAV::1982322028000856939::1783594822::1783597885::1::::<><><>0<>0<>f29a750a1dbe12c700867e2792ceb255<>res://.godot/imported/jonk_flap.wav-fab104444c8869adccf7007af9459cb4.sample::
-Main.gd::GDScript::7022682180329111506::1783601981::0::1::::<>Node3D<><>0<>0<><>::
+Main.gd::GDScript::7022682180329111506::1783631936::0::1::::<>Node3D<><>0<>0<><>::
 Main.tscn::PackedScene::78606045317371124::1783443617::0::1::::<><><>0<>0<><>::res://Main.gd
 moon_real.jpg::CompressedTexture2D::3464861772857341221::1783451482::1783458192::1::::<><><>0<>0<>ed1b050cc9d0ffd575526a5f9f76c279<>res://.godot/imported/moon_real.jpg-1f4c55c78fbe798136d4650e605b5605.ctex::
 pillar1_real.png::CompressedTexture2D::1347051565289965127::1783456961::1783458192::1::::<><><>0<>0<>7e92b62970be622d33019327c1af0863<>res://.godot/imported/pillar1_real.png-bf3661f6b6d62b67dc274fba8920cc26.ctex::
@@ -23,6 +23,13 @@ rocket_shepard.png::CompressedTexture2D::8179990434009209601::1783452183::178345
 rocket_soyuz.png::CompressedTexture2D::4478722429026106550::1783452183::1783458192::1::::<><><>0<>0<>129b5e1822225459e9620610619bc17f<>res://.godot/imported/rocket_soyuz.png-f4c3d270114d9af5496a24f70097d9c2.ctex::
 saturn_real.jpg::CompressedTexture2D::5404806476093194579::1783452183::1783458200::1::::<><><>0<>0<>3bd8fea239a51a4f6b83ad1785aba88f<>res://.godot/imported/saturn_real.jpg-295f5be57ad55dbd1f636715f406574a.ctex::
 sky_milkyway.jpg::CompressedTexture2D::4967622897477572381::1783451305::1783458197::1::::<><><>0<>0<>d68445471b015c2cd578f6e25f424267<>res://.godot/imported/sky_milkyway.jpg-771a6fec3cbbaaf0af15b3e35325a603.ctex::
-title_music.wav::AudioStreamWAV::4927962989517661353::1783595683::1783597885::1::::<><><>0<>0<>9e9dcdc0290d9301854a7b691fc98e42<>res://.godot/imported/title_music.wav-9c889ead1d420e7fa746756dad82a54e.sample::
-::res://build/::1783602008
-::res://tools/::1783595640
+title_music.wav::AudioStreamWAV::4927962989517661353::1783634285::1783634362::1::::<><><>0<>0<>9e9dcdc0290d9301854a7b691fc98e42<>res://.godot/imported/title_music.wav-9c889ead1d420e7fa746756dad82a54e.sample::
+::res://build/::1783631960
+::res://build/Flappy Jonk.app/::1783631960
+::res://build/Flappy Jonk.app/Contents/::1783631961
+::res://build/Flappy Jonk.app/Contents/_CodeSignature/::1783631961
+::res://build/Flappy Jonk.app/Contents/Frameworks/::1783631960
+::res://build/Flappy Jonk.app/Contents/MacOS/::1783631962
+::res://build/Flappy Jonk.app/Contents/Resources/::1783631961
+icon.icns::OtherFile::-1::1783631960::0::1::::<><><>0<>0<><>::
+::res://tools/::1783634227
