@@ -50,6 +50,7 @@ const SETTINGS_PATH := "user://settings.json"
 const MAX_SCORES := 10
 const FLAP_SFX_PATH := "res://jonk_flap.wav"   # Jonk's voice memo, one per flap
 const CRASH_SFX_PATH := "res://crash.wav"      # for meeting the Pillars of Creation
+const BEER_SFX_PATH := "res://beer.wav"        # for catching a bäär
 
 # difficulty select on the retro title card (NES style): gap size, base
 # scroll speed, ramp per point, speed cap
@@ -81,6 +82,7 @@ var cam: Camera3D
 var _shake := 0.0
 var flap_sfx: AudioStreamPlayer
 var crash_sfx: AudioStreamPlayer
+var beer_sfx: AudioStreamPlayer
 var muted := false
 var card_snd_label: Label3D
 var flap_arm_l: Node3D
@@ -232,6 +234,10 @@ func _build_audio() -> void:
 	add_child(crash_sfx)
 	if FileAccess.file_exists(CRASH_SFX_PATH):
 		crash_sfx.stream = AudioStreamWAV.load_from_file(ProjectSettings.globalize_path(CRASH_SFX_PATH))
+	beer_sfx = AudioStreamPlayer.new()
+	add_child(beer_sfx)
+	if FileAccess.file_exists(BEER_SFX_PATH):
+		beer_sfx.stream = AudioStreamWAV.load_from_file(ProjectSettings.globalize_path(BEER_SFX_PATH))
 	AudioServer.set_bus_mute(0, muted)
 
 func _flap() -> void:
@@ -1310,6 +1316,8 @@ func _process(delta: float) -> void:
 func _collect_beer(p: Dictionary) -> void:
 	score += BEER_POINTS
 	_beer_count += 1
+	if beer_sfx.stream != null:
+		beer_sfx.play()
 	score_label.text = str(score)
 	_beer_pop(Vector3(p.x, p.gap, 0.2))
 	p.beer.queue_free()
