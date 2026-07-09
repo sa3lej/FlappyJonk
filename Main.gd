@@ -657,19 +657,26 @@ func _jonk_grid() -> Array:
 	# — the bäär, raised high in the right fist —
 	_rect(g, 41, 0, 8, 1, "V")
 	_rect(g, 40, 1, 10, 7, "W")
-	_rect(g, 43, 3, 4, 3, "O")
+	_rect(g, 41, 1, 1, 6, "T")      # glossy aluminum glint down the side
+	_rect(g, 43, 2, 4, 3, "O")
+	_rect(g, 43, 6, 4, 1, "K")      # a whisper of label text
+	_rect(g, 40, 7, 10, 1, "V")     # bottom rim peeking above the fist
 	_rect(g, 39, 8, 12, 5, "S")     # fist wrapping the can
 	_rect(g, 41, 13, 3, 2, "S")     # wrist peg
 	_rect(g, 40, 15, 5, 8, "R")     # raised sleeve
+	_rect(g, 40, 15, 1, 6, "P")     # sleeve gloss
 	_rect(g, 38, 23, 7, 5, "R")     # shoulder — column 37 stays open: joint seam
 
 	# — head: the boxy BrickHeadz brick from the game, two pale studs up top —
 	_rect(g, 18, 2, 5, 2, "Y")
 	_rect(g, 29, 2, 5, 2, "Y")
+	_rect(g, 18, 2, 1, 1, "T")      # gleam on the studs
+	_rect(g, 29, 2, 1, 1, "T")
 	_rect(g, 15, 4, 22, 19, "S")    # big square head brick — no cylinder here
 	_rect(g, 15, 4, 1, 1, ".")      # just a hint of corner chamfer
 	_rect(g, 36, 4, 1, 1, ".")
-	_rect(g, 17, 5, 3, 3, "T")      # plastic sheen
+	_rect(g, 16, 5, 12, 1, "T")     # glossy L-shaped rim light on the brick
+	_rect(g, 16, 5, 1, 8, "T")
 
 	# — the trademark oversized square glasses, 2px-thick frames —
 	for fx in [14, 27]:
@@ -681,12 +688,13 @@ func _jonk_grid() -> Array:
 	# cream eye tiles + big round eye discs + glints, like the game head
 	_rect(g, 16, 10, 7, 5, "C")
 	_rect(g, 29, 10, 7, 5, "C")
-	_rect(g, 18, 10, 4, 4, "K")
-	_rect(g, 31, 10, 4, 4, "K")
-	for c in [[18, 10], [21, 10], [18, 13], [21, 13], [31, 10], [34, 10], [31, 13], [34, 13]]:
+	# eyes glancing up-right, straight at the bäär
+	_rect(g, 19, 10, 4, 4, "K")
+	_rect(g, 32, 10, 4, 4, "K")
+	for c in [[19, 10], [22, 10], [19, 13], [22, 13], [32, 10], [35, 10], [32, 13], [35, 13]]:
 		_rect(g, c[0], c[1], 1, 1, "C")      # rounded eye corners
-	_rect(g, 19, 11, 1, 1, "W")     # glints
-	_rect(g, 32, 11, 1, 1, "W")
+	_rect(g, 21, 10, 1, 1, "W")     # glints, up toward the can
+	_rect(g, 34, 10, 1, 1, "W")
 
 	# — nose brick, mustache, mouth slot, jaw wrap wider than the head —
 	_rect(g, 12, 15, 3, 3, "S")     # ear plates sticking out, like the game head
@@ -710,8 +718,9 @@ func _jonk_grid() -> Array:
 	_rect(g, 15, 23, 1, 1, ".")
 	_rect(g, 36, 23, 1, 1, ".")
 	_rect(g, 16, 24, 3, 3, "P")     # sheen on the chest
-	_rect(g, 21, 28, 10, 2, "W")    # two lines of shirt print
-	_rect(g, 21, 32, 10, 2, "W")
+	_rect(g, 21, 28, 10, 1, "W")    # three ragged lines of shirt print,
+	_rect(g, 21, 30, 7, 1, "W")     # like actual text
+	_rect(g, 21, 32, 9, 1, "W")
 	# stepped chin blocks hanging over the chest, like the game's beard
 	_rect(g, 18, 23, 16, 2, "B")
 	_rect(g, 22, 25, 8, 2, "M")
@@ -719,6 +728,7 @@ func _jonk_grid() -> Array:
 	# — left arm out, ending in the iconic open C-clamp —
 	_rect(g, 9, 23, 5, 5, "R")      # column 14 stays open: joint seam
 	_rect(g, 8, 28, 5, 5, "R")
+	_rect(g, 9, 23, 1, 4, "P")      # sleeve gloss
 	_rect(g, 9, 33, 3, 2, "S")      # wrist peg
 	_rect(g, 5, 35, 8, 7, "S")      # hand block...
 	_rect(g, 7, 37, 3, 3, ".")      # ...bored hollow...
