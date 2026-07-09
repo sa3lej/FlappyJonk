@@ -164,14 +164,14 @@ func _run_restart_test() -> void:
 	await get_tree().create_timer(0.3).timeout
 	_push_pad(JOY_BUTTON_DPAD_UP)
 	_push_pad(JOY_BUTTON_DPAD_UP)    # "B", picked
-	_push_pad(JOY_BUTTON_X)          # lock it, auto "A" appears -> "BA"
+	_push_pad(JOY_BUTTON_A)          # lock it, auto "A" appears -> "BA"
 	print("TEST pad_typed=%s" % name_edit.text)
 	var not_saved_by_x: bool = entering_name
 	_push_pad(JOY_BUTTON_DPAD_UP)    # pick the second letter -> "BB"
-	_push_pad(JOY_BUTTON_X)          # lock -> "BBA"
-	_push_pad(JOY_BUTTON_X)          # no letter picked -> drops slot, saves "BB"
+	_push_pad(JOY_BUTTON_A)          # lock -> "BBA"
+	_push_pad(JOY_BUTTON_A)          # no letter picked -> drops slot, saves "BB"
 	var pad_saved: bool = str(high_scores[0].name) == "BB" and not entering_name and not_saved_by_x
-	_push_pad(JOY_BUTTON_X)          # and one more X starts the game
+	_push_pad(JOY_BUTTON_A)          # and one more X starts the game
 	await get_tree().create_timer(0.2).timeout
 	var pad_restarts := state == STATE_PLAY
 
@@ -958,29 +958,12 @@ func _spawn_pipe(x: float) -> void:
 	pipes.append({ "root": root, "x": x, "gap": gap, "passed": false, "beer": beer })
 
 func _build_beer(root: Node3D, gap: float) -> Node3D:
+	# THE bäär — a photo of the actual can, subject-lifted from the shot
 	var can := Node3D.new()
 	can.position = Vector3(0, gap, 0)
 	root.add_child(can)
-	# "the bäär" can: cream body (faint glow so it stays findable at dusk)
-	_add(_cyl(0.32, 0.82), _mat(Color(0.93, 0.90, 0.83), 0.5, 0.0, true, 0.25), Vector3.ZERO, can)
-	# silver rims top and bottom
-	_add(_cyl(0.28, 0.1), _mat(Color(0.75, 0.77, 0.80), 0.2, 0.95), Vector3(0, 0.45, 0), can)
-	_add(_cyl(0.33, 0.07), _mat(Color(0.75, 0.77, 0.80), 0.2, 0.95), Vector3(0, -0.43, 0), can)
-	# the orange bear blob on the label (head + ear + snout)
-	var orange := _mat(Color(0.96, 0.62, 0.11), 0.55)
-	var bear := _add(_sphere(0.17), orange, Vector3(-0.02, -0.14, 0.24), can)
-	bear.scale = Vector3(1.25, 1.0, 0.55)
-	_add(_sphere(0.055), orange, Vector3(-0.13, 0.02, 0.27), can)
-	_add(_sphere(0.06), orange, Vector3(0.14, -0.08, 0.28), can)
-	# label text
-	var lbl := Label3D.new()
-	lbl.text = "the\nbäär"
-	lbl.font_size = 36
-	lbl.pixel_size = 0.004
-	lbl.modulate = Color(0.1, 0.1, 0.1)
-	lbl.position = Vector3(0, 0.16, 0.33)
-	can.add_child(lbl)
-	can.rotation_degrees = Vector3(0, 0, 18)
+	_photo_quad("res://beer_real.png", Vector2(0.62, 1.1), false, Vector3.ZERO, can)
+	can.rotation_degrees = Vector3(0, 0, 12)
 	return can
 
 func _clear_pipes() -> void:
@@ -1083,6 +1066,13 @@ var gameover_scores: Label
 # ---------------------------------------------------------------------------
 # INPUT
 # ---------------------------------------------------------------------------
+func _input(event: InputEvent) -> void:
+	# pad name entry runs BEFORE the GUI layer, so the focused LineEdit
+	# can never swallow or reinterpret a controller button
+	if event is InputEventJoypadButton and event.pressed and state == STATE_DEAD and entering_name:
+		_gamepad_name_input(event.button_index)
+		get_viewport().set_input_as_handled()
+
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		# secret: Cmd/Ctrl+Shift+K wipes the high-score list
@@ -1114,10 +1104,6 @@ func _unhandled_input(event: InputEvent) -> void:
 		_primary_action()
 	# game controllers (PlayStation etc.): any face button flaps, Options = fullscreen
 	elif event is InputEventJoypadButton and event.pressed:
-		# arcade-style name entry straight from the pad
-		if state == STATE_DEAD and entering_name:
-			_gamepad_name_input(event.button_index)
-			return
 		match event.button_index:
 			JOY_BUTTON_Y:
 				# Triangle: sound on/off — on the title card only,
@@ -1374,7 +1360,8 @@ func _process(delta: float) -> void:
 
 		# spin beer cans for a little shine
 		if p.beer != null and is_instance_valid(p.beer):
-			p.beer.rotation.y += 3.0 * delta
+			# the can is a photo billboard now — sway, don't spin thin
+			p.beer.rotation.z = 0.12 + sin(tsec * 3.0 + p.gap) * 0.18
 
 		# scoring when a pipe passes the head
 		if not p.passed and p.x < HEAD_X:
