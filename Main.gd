@@ -51,6 +51,7 @@ const MAX_SCORES := 10
 const FLAP_SFX_PATH := "res://jonk_flap.wav"   # Jonk's voice memo, one per flap
 const CRASH_SFX_PATH := "res://crash.wav"      # for meeting the Pillars of Creation
 const BEER_SFX_PATH := "res://beer.wav"        # for catching a bäär
+const MUSIC_PATH := "res://title_music.wav"    # chiptune loop (tools/make_title_music.py)
 
 # difficulty select on the retro title card (NES style): gap size, base
 # scroll speed, ramp per point, speed cap
@@ -83,6 +84,7 @@ var _shake := 0.0
 var flap_sfx: AudioStreamPlayer
 var crash_sfx: AudioStreamPlayer
 var beer_sfx: AudioStreamPlayer
+var menu_music: AudioStreamPlayer
 var muted := false
 var card_snd_label: Label3D
 var flap_arm_l: Node3D
@@ -238,6 +240,15 @@ func _build_audio() -> void:
 	add_child(beer_sfx)
 	if FileAccess.file_exists(BEER_SFX_PATH):
 		beer_sfx.stream = AudioStreamWAV.load_from_file(ProjectSettings.globalize_path(BEER_SFX_PATH))
+	menu_music = AudioStreamPlayer.new()
+	menu_music.volume_db = -6.0
+	add_child(menu_music)
+	if FileAccess.file_exists(MUSIC_PATH):
+		var m := AudioStreamWAV.load_from_file(ProjectSettings.globalize_path(MUSIC_PATH))
+		m.loop_mode = AudioStreamWAV.LOOP_FORWARD
+		m.loop_begin = 0
+		m.loop_end = m.data.size() / 2   # frames (16-bit mono)
+		menu_music.stream = m
 	AudioServer.set_bus_mute(0, muted)
 
 func _flap() -> void:
@@ -948,6 +959,8 @@ func _goto_menu() -> void:
 	score_label.visible = false
 	var top := int(high_scores[0].score) if high_scores.size() > 0 else 0
 	hiscore_label.text = "HI-SCORE  %d" % top
+	if menu_music.stream != null and not menu_music.playing:
+		menu_music.play()
 
 func _start_game() -> void:
 	state = STATE_PLAY
@@ -970,6 +983,7 @@ func _start_game() -> void:
 	head.rotation = Vector3.ZERO
 	head.visible = true
 	retro_root.visible = false
+	menu_music.stop()
 	_flap()   # liftoff — with the war cry, of course
 	gameover_box.visible = false
 	score_label.visible = true
