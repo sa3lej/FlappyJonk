@@ -239,25 +239,26 @@ func _save_shot(path: String) -> void:
 	get_viewport().get_texture().get_image().save_png(path)
 
 func _build_audio() -> void:
-	# Jonk's own voice, loaded at runtime like every other asset here.
+	# all audio goes through the import system (load) so the same code
+	# works in dev runs AND inside an exported app's pack.
 	# Missing file = silent game, no drama.
 	flap_sfx = AudioStreamPlayer.new()
 	add_child(flap_sfx)
-	if FileAccess.file_exists(FLAP_SFX_PATH):
-		flap_sfx.stream = AudioStreamWAV.load_from_file(ProjectSettings.globalize_path(FLAP_SFX_PATH))
+	if ResourceLoader.exists(FLAP_SFX_PATH):
+		flap_sfx.stream = load(FLAP_SFX_PATH)
 	crash_sfx = AudioStreamPlayer.new()
 	add_child(crash_sfx)
-	if FileAccess.file_exists(CRASH_SFX_PATH):
-		crash_sfx.stream = AudioStreamWAV.load_from_file(ProjectSettings.globalize_path(CRASH_SFX_PATH))
+	if ResourceLoader.exists(CRASH_SFX_PATH):
+		crash_sfx.stream = load(CRASH_SFX_PATH)
 	beer_sfx = AudioStreamPlayer.new()
 	add_child(beer_sfx)
-	if FileAccess.file_exists(BEER_SFX_PATH):
-		beer_sfx.stream = AudioStreamWAV.load_from_file(ProjectSettings.globalize_path(BEER_SFX_PATH))
+	if ResourceLoader.exists(BEER_SFX_PATH):
+		beer_sfx.stream = load(BEER_SFX_PATH)
 	menu_music = AudioStreamPlayer.new()
 	menu_music.volume_db = -6.0
 	add_child(menu_music)
-	if FileAccess.file_exists(MUSIC_PATH):
-		var m := AudioStreamWAV.load_from_file(ProjectSettings.globalize_path(MUSIC_PATH))
+	if ResourceLoader.exists(MUSIC_PATH):
+		var m: AudioStreamWAV = load(MUSIC_PATH)
 		m.loop_mode = AudioStreamWAV.LOOP_FORWARD
 		m.loop_begin = 0
 		m.loop_end = m.data.size() / 2   # frames (16-bit mono)
@@ -309,8 +310,7 @@ func _build_environment() -> void:
 	# a real photograph of the Milky Way wrapped around the whole sky
 	# (ESO/S. Brunier 360° panorama, CC BY 4.0 — credited in the README)
 	var sky_mat := PanoramaSkyMaterial.new()
-	var sky_img := Image.load_from_file("res://sky_milkyway.jpg")
-	sky_mat.panorama = ImageTexture.create_from_image(sky_img)
+	sky_mat.panorama = load("res://sky_milkyway.jpg")
 	sky_mat.energy_multiplier = 1.4
 	sky.sky_material = sky_mat
 	env.sky = sky
@@ -475,9 +475,8 @@ func _photo_quad(res_path: String, size: Vector2, additive := false, pos := Vect
 	# pure-black background (perfect for astro photos). Textures are cached
 	# so repeat spawns (obstacles!) don't re-decode the file.
 	if not _tex_cache.has(res_path):
-		var img := Image.load_from_file(ProjectSettings.globalize_path(res_path))
-		_tex_cache[res_path] = ImageTexture.create_from_image(img)
-	var tex: ImageTexture = _tex_cache[res_path]
+		_tex_cache[res_path] = load(res_path)
+	var tex: Texture2D = _tex_cache[res_path]
 	var q := QuadMesh.new()
 	q.size = size
 	var m := StandardMaterial3D.new()
@@ -858,11 +857,8 @@ func _retro_label(txt: String, fs: int, pix: float, color: Color, pos: Vector3, 
 	return l
 
 func _build_retro_card() -> void:
-	retro_font = FontFile.new()
-	retro_font.load_dynamic_font("res://pixel_font.ttf")
-	retro_font.antialiasing = TextServer.FONT_ANTIALIASING_NONE
-	retro_font.subpixel_positioning = TextServer.SUBPIXEL_POSITIONING_DISABLED
-	retro_font.generate_mipmaps = false
+	# imported with antialiasing off + subpixel disabled (pixel_font.ttf.import)
+	retro_font = load("res://pixel_font.ttf")
 
 	retro_root = Node3D.new()
 	add_child(retro_root)
