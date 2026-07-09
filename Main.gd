@@ -53,6 +53,12 @@ const CRASH_SFX_PATH := "res://crash.wav"      # for meeting the Pillars of Crea
 const BEER_SFX_PATH := "res://beer.wav"        # for catching a bäär
 const MUSIC_PATH := "res://title_music.wav"    # chiptune loop (tools/make_title_music.py)
 
+# the world leaderboard — a Cloudflare Worker in front of a D1 database
+# (source in backend/). The key keeps honest people honest; the Worker
+# adds sanity checks and a rate limit on top.
+const LB_URL := "https://flappyjonk.jonsson-es.workers.dev"
+const LB_KEY := "b70fc75f28b4161e23edbbc657ed3a946314db3a"
+
 # difficulty select on the retro title card (NES style): gap size, base
 # scroll speed, ramp per point, speed cap
 const DIFF_NAMES := ["EASY", "NORMAL", "DIFFICULT"]
@@ -111,6 +117,7 @@ func _ready() -> void:
 	randomize()
 	_load_scores()
 	_load_settings()
+	_build_net()
 	_build_audio()
 	_build_environment()
 	_build_camera()
@@ -263,6 +270,50 @@ func _run_shot_sequence() -> void:
 func _save_shot(path: String) -> void:
 	await RenderingServer.frame_post_draw
 	get_viewport().get_texture().get_image().save_png(path)
+
+var lb_fetch: HTTPRequest
+var lb_submit: HTTPRequest
+var world_scores: Array = []
+var _net_enabled := true
+
+func _build_net() -> void:
+	# regression tests must never touch the real leaderboard
+	_net_enabled = not OS.get_cmdline_user_args().has("--test-restart")
+	lb_fetch = HTTPRequest.new()
+	lb_fetch.timeout = 6.0
+	add_child(lb_fetch)
+	lb_fetch.request_completed.connect(_on_world_fetched)
+	lb_submit = HTTPRequest.new()
+	lb_submit.timeout = 6.0
+	add_child(lb_submit)
+
+func _fetch_world() -> void:
+	if not _net_enabled:
+		return
+	lb_fetch.cancel_request()
+	lb_fetch.request(LB_URL + "/top10")
+
+func _submit_world(nm: String, sc: int, beers: int) -> void:
+	if not _net_enabled or _pilot_flew:
+		return
+	lb_submit.cancel_request()
+	lb_submit.request(LB_URL + "/submit",
+		["Content-Type: application/json", "X-Jonk-Key: " + LB_KEY],
+		HTTPClient.METHOD_POST,
+		JSON.stringify({ "name": nm, "score": sc, "beers": beers }))
+	# refresh a moment later so your name shows up on the world list
+	get_tree().create_timer(2.0).timeout.connect(_fetch_world)
+
+func _on_world_fetched(result: int, code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	if result != HTTPRequest.RESULT_SUCCESS or code != 200:
+		return   # offline is fine — the local list carries the screen
+	var data = JSON.parse_string(body.get_string_from_utf8())
+	if typeof(data) != TYPE_ARRAY:
+		return
+	world_scores = data
+	_refresh_scores_label(gameover_scores)
+	if state == STATE_MENU and world_scores.size() > 0:
+		hiscore_label.text = "WORLD HI  %d %s" % [int(world_scores[0].score), str(world_scores[0].name)]
 
 func _build_audio() -> void:
 	# all audio goes through the import system (load) so the same code
@@ -1009,6 +1060,7 @@ func _goto_menu() -> void:
 	score_label.visible = false
 	var top := int(high_scores[0].score) if high_scores.size() > 0 else 0
 	hiscore_label.text = "HI-SCORE  %d" % top
+	_fetch_world()
 	if music_on and menu_music.stream != null and not menu_music.playing:
 		menu_music.play()
 
@@ -1220,6 +1272,7 @@ func _on_name_submitted(_t := "") -> void:
 	if nm == "":
 		nm = "ANONYMOUS"   # Jonk doesn't get credit for other people's runs
 	_save_score(nm, score)
+	_submit_world(nm, score, _beer_count)
 	entering_name = false
 	name_row.visible = false
 	name_edit.release_focus()
@@ -1515,9 +1568,12 @@ func _save_score(nm: String, sc: int) -> void:
 func _refresh_scores_label(label: Label, limit := MAX_SCORES) -> void:
 	if label == null:
 		return
-	var lines := ["- HIGH SCORES -", ""]
+	# the world list when we have it, the local family list otherwise
+	var online := world_scores.size() > 0
+	var src: Array = world_scores if online else high_scores
+	var lines := ["- WORLD HI-SCORES -" if online else "- HIGH SCORES -", ""]
 	var rank := 1
-	for e in high_scores:
+	for e in src:
 		if rank > limit:
 			break
 		lines.append("%2d.  %-10s %5d" % [rank, str(e.name).left(10), int(e.score)])

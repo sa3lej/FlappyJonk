@@ -1,0 +1,8 @@
+name = "flappyjonk"
+main = "src/index.js"
+compatibility_date = "2026-01-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "flappyjonk"
+database_id = "e97e4bf0-a692-498c-a4d6-4572a7f79ec2"
