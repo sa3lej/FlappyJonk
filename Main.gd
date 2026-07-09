@@ -166,6 +166,10 @@ func _run_restart_test() -> void:
 	score = 999
 	_die()
 	await get_tree().create_timer(0.3).timeout
+	_push_pad(JOY_BUTTON_A)          # mashed during the death grace...
+	var grace_holds: bool = entering_name and name_edit.text.is_empty()
+	print("TEST grace_blocks_pad_mash=%s" % grace_holds)
+	await get_tree().create_timer(0.9).timeout   # grace over
 	_push_pad(JOY_BUTTON_DPAD_UP)    # a letter appears: "A"
 	_push_pad(JOY_BUTTON_DPAD_UP)    # spun to "B"
 	_push_pad(JOY_BUTTON_A)          # X locks it — NOTHING new may appear
@@ -181,7 +185,8 @@ func _run_restart_test() -> void:
 	await get_tree().create_timer(0.2).timeout
 	var pad_restarts := state == STATE_PLAY
 
-	# phase 2: keyboard — space in the focused name field saves + restarts
+	# phase 2: keyboard — mashed/empty spaces do nothing; with a typed
+	# name, space saves + restarts
 	score = 998
 	_die()
 	await get_tree().create_timer(0.5).timeout
@@ -189,13 +194,18 @@ func _run_restart_test() -> void:
 	var ti := uargs.find("--test-restart")
 	if ti + 1 < uargs.size() and not uargs[ti + 1].begins_with("--"):
 		await _save_shot(uargs[ti + 1] + "/test_confetti.png")
-	var ev := InputEventKey.new()
-	ev.keycode = KEY_SPACE
-	ev.physical_keycode = KEY_SPACE
-	ev.pressed = true
-	get_viewport().push_input(ev)
+	_push_space()                    # still inside the grace — ignored
+	var kbd_grace: bool = state == STATE_DEAD
+	await get_tree().create_timer(0.7).timeout
+	_push_space()                    # grace over, but the field is EMPTY — ignored
+	var empty_guard: bool = state == STATE_DEAD
+	print("TEST grace_blocks_kbd_mash=%s empty_space_ignored=%s" % [kbd_grace, empty_guard])
+	name_edit.text = "LISA"
+	_push_space()                    # typed name + space = save and go
 	await get_tree().create_timer(0.3).timeout
-	print("TEST_RESULT pad_name_saved=%s pad_restarts=%s kbd_restarts=%s" % [pad_saved, pad_restarts, state == STATE_PLAY])
+	var lisa_saved: bool = high_scores.any(func(e): return str(e.name) == "LISA")
+	var kbd_ok: bool = state == STATE_PLAY and lisa_saved and kbd_grace and empty_guard
+	print("TEST_RESULT pad_name_saved=%s pad_restarts=%s kbd_saves_and_restarts=%s" % [pad_saved, pad_restarts, kbd_ok])
 	# put the family leaderboard back exactly as it was
 	high_scores = scores_backup
 	_write_scores()
@@ -204,6 +214,13 @@ func _run_restart_test() -> void:
 func _push_pad(btn: int) -> void:
 	var e := InputEventJoypadButton.new()
 	e.button_index = btn
+	e.pressed = true
+	get_viewport().push_input(e)
+
+func _push_space() -> void:
+	var e := InputEventKey.new()
+	e.keycode = KEY_SPACE
+	e.physical_keycode = KEY_SPACE
 	e.pressed = true
 	get_viewport().push_input(e)
 
@@ -1034,6 +1051,9 @@ func _die() -> void:
 			if absf(p.x - HEAD_X) < 8.0:
 				near += " (dx=%.1f gap=%.1f)" % [p.x - HEAD_X, p.gap]
 		print("DEATH score=%d y=%.2f v=%.1f speed=%.1f%s" % [score, head.position.y, velocity_y, speed, near])
+	# a moment of respectful silence: reflex-mashed flaps right after
+	# death must not blow past the game-over screen
+	_death_time = Time.get_ticks_msec()
 	# the classic flappy death plunge: tumble off the bottom of the screen
 	_death_tween = create_tween().set_parallel(true)
 	_death_tween.tween_property(head, "position:y", -12.0, 0.8).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
@@ -1067,6 +1087,10 @@ func _die() -> void:
 
 var _beer_count := 0
 var _death_tween: Tween
+var _death_time := 0
+
+func _death_grace_over() -> bool:
+	return Time.get_ticks_msec() - _death_time > 1000
 var gameover_scores: Label
 
 # ---------------------------------------------------------------------------
@@ -1141,6 +1165,8 @@ func _gamepad_name_input(btn: int) -> void:
 	# letters ONLY appear when you spin the d-pad. X locks the current
 	# letter (nothing new appears), and X with nothing unlocked SAVES —
 	# so X can never, ever conjure up an unwanted A. Circle erases.
+	if not _death_grace_over():
+		return   # reflex-mashed flaps don't touch the name entry
 	var t := name_edit.text
 	match btn:
 		JOY_BUTTON_DPAD_UP, JOY_BUTTON_DPAD_DOWN:
@@ -1178,9 +1204,11 @@ func _primary_action() -> void:
 		STATE_PLAY:
 			_flap()
 		STATE_DEAD:
+			if not _death_grace_over():
+				return   # reflex mashing right after death changes nothing
 			if entering_name:
-				# don't swallow the press — bank the name (empty → JONK)
-				# and get straight back into the game
+				# don't swallow the press — bank the name and get
+				# straight back into the game
 				_on_name_submitted()
 			_goto_menu()
 			_start_game()
@@ -1200,9 +1228,13 @@ func _on_name_submitted(_t := "") -> void:
 
 func _on_name_gui_input(event: InputEvent) -> void:
 	# arcade names don't have spaces — SPACE in the name field means
-	# "save and play again", so one press always restarts
+	# "save and play again". But only once the death grace is over AND
+	# at least one letter is typed: mashed spaces must never skip the
+	# entry and save ANONYMOUS. Skipping on purpose = ENTER or SAVE.
 	if event is InputEventKey and event.pressed and event.keycode == KEY_SPACE:
 		name_edit.accept_event()
+		if not _death_grace_over() or name_edit.text.strip_edges().is_empty():
+			return
 		_on_name_submitted()
 		_goto_menu()
 		_start_game()
