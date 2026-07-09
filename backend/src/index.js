@@ -53,6 +53,25 @@ export default {
       return Response.json({ ok: true });
     }
 
+    // --- admin: the ADMIN_KEY never ships inside the app ---
+    if (req.method === "POST" && url.pathname === "/reset") {
+      if (req.headers.get("X-Admin-Key") !== env.ADMIN_KEY)
+        return new Response("nope", { status: 401 });
+      await env.DB.prepare("DELETE FROM scores").run();
+      return Response.json({ ok: true, cleared: true });
+    }
+
+    if (req.method === "POST" && url.pathname === "/remove") {
+      if (req.headers.get("X-Admin-Key") !== env.ADMIN_KEY)
+        return new Response("nope", { status: 401 });
+      let b;
+      try { b = await req.json(); } catch { return new Response("bad json", { status: 400 }); }
+      const name = String(b.name ?? "").toUpperCase().trim();
+      if (!name) return new Response("no name", { status: 400 });
+      const r = await env.DB.prepare("DELETE FROM scores WHERE name = ?").bind(name).run();
+      return Response.json({ ok: true, removed: r.meta.changes });
+    }
+
     return new Response("FLAPPY JONK WORLD LEADERBOARD", { status: 404 });
   },
 };

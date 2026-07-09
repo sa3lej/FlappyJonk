@@ -304,6 +304,22 @@ func _submit_world(nm: String, sc: int, beers: int) -> void:
 	# refresh a moment later so your name shows up on the world list
 	get_tree().create_timer(2.0).timeout.connect(_fetch_world)
 
+func _clear_world_scores() -> void:
+	# only works where user://admin_key.txt exists (Lars-Erik's machine) —
+	# the admin key is never baked into the app itself
+	if not _net_enabled:
+		return
+	if not FileAccess.file_exists("user://admin_key.txt"):
+		_toast("NOT AN ADMIN MACHINE")
+		return
+	var akey := FileAccess.open("user://admin_key.txt", FileAccess.READ).get_as_text().strip_edges()
+	lb_submit.cancel_request()
+	lb_submit.request(LB_URL + "/reset", ["X-Admin-Key: " + akey], HTTPClient.METHOD_POST, "")
+	world_scores = []
+	_refresh_scores_label(gameover_scores)
+	get_tree().create_timer(2.0).timeout.connect(_fetch_world)
+	_toast("WORLD LIST CLEARED")
+
 func _on_world_fetched(result: int, code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
 	if result != HTTPRequest.RESULT_SUCCESS or code != 200:
 		return   # offline is fine — the local list carries the screen
@@ -1165,6 +1181,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event.keycode == KEY_A and event.shift_pressed and (event.meta_pressed or event.ctrl_pressed):
 			_cheat_pilot = not _cheat_pilot
 			_toast("AUTOPILOT ENGAGED" if _cheat_pilot else "AUTOPILOT OFF")
+			return
+		# secret: Cmd/Ctrl+Shift+W wipes the WORLD list — admin machines only
+		if event.keycode == KEY_W and event.shift_pressed and (event.meta_pressed or event.ctrl_pressed):
+			_clear_world_scores()
 			return
 		match event.keycode:
 			KEY_SPACE:
