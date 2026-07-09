@@ -144,6 +144,17 @@ func _run_restart_test() -> void:
 	# work, and ONE press must always get you back into the game
 	await get_tree().create_timer(0.8).timeout
 
+	# phase 0: on the title card, Triangle toggles sound, Circle the melody
+	var m0 := muted
+	var t0 := music_on
+	_push_pad(JOY_BUTTON_Y)
+	var tri_ok := muted != m0
+	_push_pad(JOY_BUTTON_Y)
+	_push_pad(JOY_BUTTON_B)
+	var ring_ok := music_on != t0
+	_push_pad(JOY_BUTTON_B)
+	print("TEST triangle_mutes=%s ring_toggles_music=%s" % [tri_ok, ring_ok])
+
 	# phase 1: gamepad — spin up "B", Square adds an "A", Cross saves, restart
 	_start_game()
 	await get_tree().create_timer(0.5).timeout
@@ -1107,7 +1118,20 @@ func _unhandled_input(event: InputEvent) -> void:
 			_gamepad_name_input(event.button_index)
 			return
 		match event.button_index:
-			JOY_BUTTON_A, JOY_BUTTON_B, JOY_BUTTON_X, JOY_BUTTON_Y:
+			JOY_BUTTON_Y:
+				# Triangle: sound on/off — on the title card only,
+				# mid-flight it flaps like everything else
+				if state == STATE_MENU:
+					_toggle_mute()
+				else:
+					_primary_action()
+			JOY_BUTTON_B:
+				# Circle: title melody on/off
+				if state == STATE_MENU:
+					_toggle_music()
+				else:
+					_primary_action()
+			JOY_BUTTON_A, JOY_BUTTON_X:
 				_primary_action()
 			JOY_BUTTON_DPAD_LEFT:
 				_nudge_difficulty(-1)
@@ -1137,7 +1161,7 @@ func _gamepad_name_input(btn: int) -> void:
 				name_edit.text = t + "A"
 		JOY_BUTTON_B, JOY_BUTTON_DPAD_LEFT:
 			name_edit.text = t.left(t.length() - 1)
-		JOY_BUTTON_A, JOY_BUTTON_START, JOY_BUTTON_Y:
+		JOY_BUTTON_A, JOY_BUTTON_START:
 			_on_name_submitted()
 
 func _nudge_difficulty(dir: int) -> void:
