@@ -49,6 +49,7 @@ const SAVE_PATH := "user://highscores.json"
 const SETTINGS_PATH := "user://settings.json"
 const MAX_SCORES := 10
 const FLAP_SFX_PATH := "res://jonk_flap.wav"   # Jonk's voice memo, one per flap
+const CRASH_SFX_PATH := "res://crash.wav"      # for meeting the Pillars of Creation
 
 # difficulty select on the retro title card (NES style): gap size, base
 # scroll speed, ramp per point, speed cap
@@ -79,6 +80,7 @@ var head: Node3D
 var cam: Camera3D
 var _shake := 0.0
 var flap_sfx: AudioStreamPlayer
+var crash_sfx: AudioStreamPlayer
 var muted := false
 var card_snd_label: Label3D
 var flap_arm_l: Node3D
@@ -226,6 +228,10 @@ func _build_audio() -> void:
 	add_child(flap_sfx)
 	if FileAccess.file_exists(FLAP_SFX_PATH):
 		flap_sfx.stream = AudioStreamWAV.load_from_file(ProjectSettings.globalize_path(FLAP_SFX_PATH))
+	crash_sfx = AudioStreamPlayer.new()
+	add_child(crash_sfx)
+	if FileAccess.file_exists(CRASH_SFX_PATH):
+		crash_sfx.stream = AudioStreamWAV.load_from_file(ProjectSettings.globalize_path(CRASH_SFX_PATH))
 	AudioServer.set_bus_mute(0, muted)
 
 func _flap() -> void:
@@ -1283,6 +1289,8 @@ func _process(delta: float) -> void:
 		if abs(p.x - HEAD_X) < (PIPE_RADIUS + HEAD_RADIUS):
 			var half := pipe_gap / 2.0
 			if head.position.y > p.gap + half - HEAD_RADIUS or head.position.y < p.gap - half + HEAD_RADIUS:
+				if crash_sfx.stream != null:
+					crash_sfx.play()   # the Pillars of Creation strike back
 				_die()
 				return
 
