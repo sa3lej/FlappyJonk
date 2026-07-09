@@ -155,20 +155,23 @@ func _run_restart_test() -> void:
 	_push_pad(JOY_BUTTON_B)
 	print("TEST triangle_mutes=%s ring_toggles_music=%s" % [tri_ok, ring_ok])
 
-	# phase 1: gamepad — spin up "B", X adds an "A", ONLY START saves, restart
+	# phase 1: gamepad — spin B, X locks it, spin B, X locks, X saves "BB",
+	# X starts the next game: the whole X-X-X flow
 	_start_game()
 	await get_tree().create_timer(0.5).timeout
 	score = 999
 	_die()
 	await get_tree().create_timer(0.3).timeout
 	_push_pad(JOY_BUTTON_DPAD_UP)
-	_push_pad(JOY_BUTTON_DPAD_UP)
-	_push_pad(JOY_BUTTON_A)          # Cross must ADD a letter, never save
+	_push_pad(JOY_BUTTON_DPAD_UP)    # "B", picked
+	_push_pad(JOY_BUTTON_X)          # lock it, auto "A" appears -> "BA"
 	print("TEST pad_typed=%s" % name_edit.text)
 	var not_saved_by_x: bool = entering_name
-	_push_pad(JOY_BUTTON_START)
-	var pad_saved: bool = str(high_scores[0].name) == "BA" and not entering_name and not_saved_by_x
-	_push_pad(JOY_BUTTON_A)
+	_push_pad(JOY_BUTTON_DPAD_UP)    # pick the second letter -> "BB"
+	_push_pad(JOY_BUTTON_X)          # lock -> "BBA"
+	_push_pad(JOY_BUTTON_X)          # no letter picked -> drops slot, saves "BB"
+	var pad_saved: bool = str(high_scores[0].name) == "BB" and not entering_name and not_saved_by_x
+	_push_pad(JOY_BUTTON_X)          # and one more X starts the game
 	await get_tree().create_timer(0.2).timeout
 	var pad_restarts := state == STATE_PLAY
 
@@ -1062,8 +1065,9 @@ func _die() -> void:
 	elif qualifies and score > 0:
 		entering_name = true
 		name_row.visible = true
-		hint_label.text = "NEW HI-SCORE! TYPE YOUR NAME\nUP/DOWN = LETTER   X = NEXT\nCIRCLE = ERASE   START = SAVE"
+		hint_label.text = "NEW HI-SCORE! TYPE YOUR NAME\nUP/DOWN = LETTER   X = NEXT\nX AGAIN = SAVE   CIRCLE = ERASE"
 		name_edit.text = ""
+		_pad_letter_touched = false
 		name_edit.grab_focus()
 		_confetti()
 	else:
@@ -1139,11 +1143,13 @@ func _unhandled_input(event: InputEvent) -> void:
 
 const NAME_CHARS := "ABCDEFGHIJKLMNOPQRSTUVWXYZÅÄÖ0123456789"
 
+var _pad_letter_touched := false
+
 func _gamepad_name_input(btn: int) -> void:
-	# the classic arcade drill: d-pad up/down spins the letter, X locks it
-	# in and starts the next — and so does every other face button except
-	# Circle, so a mispress can never save a half-typed name. Circle
-	# erases. ONLY START saves. The on-screen legend spells it out.
+	# the arcade drill, PlayStation edition: d-pad up/down picks the
+	# letter, X locks it in and starts the next. Pressing X again WITHOUT
+	# picking a letter means you're done — the unused slot is dropped and
+	# the name saves. Circle erases. (Options also saves, quietly.)
 	var t := name_edit.text
 	match btn:
 		JOY_BUTTON_DPAD_UP, JOY_BUTTON_DPAD_DOWN:
@@ -1153,11 +1159,24 @@ func _gamepad_name_input(btn: int) -> void:
 			else:
 				var i := NAME_CHARS.find(t[-1])
 				name_edit.text = t.left(t.length() - 1) + NAME_CHARS[wrapi(i + dir, 0, NAME_CHARS.length())]
+			_pad_letter_touched = true
 		JOY_BUTTON_A, JOY_BUTTON_X, JOY_BUTTON_Y, JOY_BUTTON_DPAD_RIGHT:
-			if t.length() < name_edit.max_length:
-				name_edit.text = t + "A"
+			if t.is_empty():
+				name_edit.text = "A"
+				_pad_letter_touched = false
+			elif _pad_letter_touched:
+				if t.length() < name_edit.max_length:
+					name_edit.text = t + "A"
+					_pad_letter_touched = false
+				else:
+					_on_name_submitted()   # name is full — X saves it
+			else:
+				# X twice with no letter picked: drop the unused slot, save
+				name_edit.text = t.left(t.length() - 1)
+				_on_name_submitted()
 		JOY_BUTTON_B, JOY_BUTTON_DPAD_LEFT:
 			name_edit.text = t.left(t.length() - 1)
+			_pad_letter_touched = true
 		JOY_BUTTON_START:
 			_on_name_submitted()
 
