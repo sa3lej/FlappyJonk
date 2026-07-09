@@ -155,7 +155,7 @@ func _run_restart_test() -> void:
 	_push_pad(JOY_BUTTON_B)
 	print("TEST triangle_mutes=%s ring_toggles_music=%s" % [tri_ok, ring_ok])
 
-	# phase 1: gamepad — spin up "B", Square adds an "A", Cross saves, restart
+	# phase 1: gamepad — spin up "B", X adds an "A", ONLY START saves, restart
 	_start_game()
 	await get_tree().create_timer(0.5).timeout
 	score = 999
@@ -163,10 +163,11 @@ func _run_restart_test() -> void:
 	await get_tree().create_timer(0.3).timeout
 	_push_pad(JOY_BUTTON_DPAD_UP)
 	_push_pad(JOY_BUTTON_DPAD_UP)
-	_push_pad(JOY_BUTTON_X)
+	_push_pad(JOY_BUTTON_A)          # Cross must ADD a letter, never save
 	print("TEST pad_typed=%s" % name_edit.text)
-	_push_pad(JOY_BUTTON_A)
-	var pad_saved: bool = str(high_scores[0].name) == "BA" and not entering_name
+	var not_saved_by_x: bool = entering_name
+	_push_pad(JOY_BUTTON_START)
+	var pad_saved: bool = str(high_scores[0].name) == "BA" and not entering_name and not_saved_by_x
 	_push_pad(JOY_BUTTON_A)
 	await get_tree().create_timer(0.2).timeout
 	var pad_restarts := state == STATE_PLAY
@@ -308,7 +309,7 @@ func _build_environment() -> void:
 	# a real photograph of the Milky Way wrapped around the whole sky
 	# (ESO/S. Brunier 360° panorama, CC BY 4.0 — credited in the README)
 	var sky_mat := PanoramaSkyMaterial.new()
-	var sky_img := Image.load_from_file(ProjectSettings.globalize_path("res://sky_milkyway.jpg"))
+	var sky_img := Image.load_from_file("res://sky_milkyway.jpg")
 	sky_mat.panorama = ImageTexture.create_from_image(sky_img)
 	sky_mat.energy_multiplier = 1.4
 	sky.sky_material = sky_mat
@@ -858,7 +859,7 @@ func _retro_label(txt: String, fs: int, pix: float, color: Color, pos: Vector3, 
 
 func _build_retro_card() -> void:
 	retro_font = FontFile.new()
-	retro_font.load_dynamic_font(ProjectSettings.globalize_path("res://pixel_font.ttf"))
+	retro_font.load_dynamic_font("res://pixel_font.ttf")
 	retro_font.antialiasing = TextServer.FONT_ANTIALIASING_NONE
 	retro_font.subpixel_positioning = TextServer.SUBPIXEL_POSITIONING_DISABLED
 	retro_font.generate_mipmaps = false
@@ -1065,7 +1066,7 @@ func _die() -> void:
 	elif qualifies and score > 0:
 		entering_name = true
 		name_row.visible = true
-		hint_label.text = "NEW HI-SCORE! TYPE YOUR NAME\nPAD: DPAD PICKS+ADDS · X SAVES"
+		hint_label.text = "NEW HI-SCORE! TYPE YOUR NAME\nUP/DOWN = LETTER   X = NEXT\nCIRCLE = ERASE   START = SAVE"
 		name_edit.text = ""
 		name_edit.grab_focus()
 		_confetti()
@@ -1143,10 +1144,10 @@ func _unhandled_input(event: InputEvent) -> void:
 const NAME_CHARS := "ABCDEFGHIJKLMNOPQRSTUVWXYZÅÄÖ0123456789"
 
 func _gamepad_name_input(btn: int) -> void:
-	# the classic arcade drill, in PlayStation terms: d-pad up/down spins
-	# the letter, Square/right adds the next one, Circle/left erases —
-	# and Cross (Godot calls it JOY_BUTTON_A) SAVES, because Cross is
-	# the PlayStation confirm button
+	# the classic arcade drill: d-pad up/down spins the letter, X locks it
+	# in and starts the next — and so does every other face button except
+	# Circle, so a mispress can never save a half-typed name. Circle
+	# erases. ONLY START saves. The on-screen legend spells it out.
 	var t := name_edit.text
 	match btn:
 		JOY_BUTTON_DPAD_UP, JOY_BUTTON_DPAD_DOWN:
@@ -1156,12 +1157,12 @@ func _gamepad_name_input(btn: int) -> void:
 			else:
 				var i := NAME_CHARS.find(t[-1])
 				name_edit.text = t.left(t.length() - 1) + NAME_CHARS[wrapi(i + dir, 0, NAME_CHARS.length())]
-		JOY_BUTTON_X, JOY_BUTTON_DPAD_RIGHT:
+		JOY_BUTTON_A, JOY_BUTTON_X, JOY_BUTTON_Y, JOY_BUTTON_DPAD_RIGHT:
 			if t.length() < name_edit.max_length:
 				name_edit.text = t + "A"
 		JOY_BUTTON_B, JOY_BUTTON_DPAD_LEFT:
 			name_edit.text = t.left(t.length() - 1)
-		JOY_BUTTON_A, JOY_BUTTON_START:
+		JOY_BUTTON_START:
 			_on_name_submitted()
 
 func _nudge_difficulty(dir: int) -> void:
