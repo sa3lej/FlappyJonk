@@ -144,7 +144,7 @@ func _run_restart_test() -> void:
 	# work, and ONE press must always get you back into the game
 	await get_tree().create_timer(0.8).timeout
 
-	# phase 1: gamepad — spin up "B", lock in an "A", save, restart
+	# phase 1: gamepad — spin up "B", Square adds an "A", Cross saves, restart
 	_start_game()
 	await get_tree().create_timer(0.5).timeout
 	score = 999
@@ -152,9 +152,9 @@ func _run_restart_test() -> void:
 	await get_tree().create_timer(0.3).timeout
 	_push_pad(JOY_BUTTON_DPAD_UP)
 	_push_pad(JOY_BUTTON_DPAD_UP)
-	_push_pad(JOY_BUTTON_A)
+	_push_pad(JOY_BUTTON_X)
 	print("TEST pad_typed=%s" % name_edit.text)
-	_push_pad(JOY_BUTTON_START)
+	_push_pad(JOY_BUTTON_A)
 	var pad_saved: bool = str(high_scores[0].name) == "BA" and not entering_name
 	_push_pad(JOY_BUTTON_A)
 	await get_tree().create_timer(0.2).timeout
@@ -1054,7 +1054,7 @@ func _die() -> void:
 	elif qualifies and score > 0:
 		entering_name = true
 		name_row.visible = true
-		hint_label.text = "NEW HI-SCORE! TYPE YOUR NAME\nPAD: DPAD+A/B · START SAVES"
+		hint_label.text = "NEW HI-SCORE! TYPE YOUR NAME\nPAD: DPAD PICKS+ADDS · X SAVES"
 		name_edit.text = ""
 		name_edit.grab_focus()
 		_confetti()
@@ -1119,8 +1119,10 @@ func _unhandled_input(event: InputEvent) -> void:
 const NAME_CHARS := "ABCDEFGHIJKLMNOPQRSTUVWXYZÅÄÖ0123456789"
 
 func _gamepad_name_input(btn: int) -> void:
-	# the classic arcade drill: d-pad up/down spins the letter, A locks it
-	# in and starts the next, B erases, START saves the name
+	# the classic arcade drill, in PlayStation terms: d-pad up/down spins
+	# the letter, Square/right adds the next one, Circle/left erases —
+	# and Cross (Godot calls it JOY_BUTTON_A) SAVES, because Cross is
+	# the PlayStation confirm button
 	var t := name_edit.text
 	match btn:
 		JOY_BUTTON_DPAD_UP, JOY_BUTTON_DPAD_DOWN:
@@ -1130,12 +1132,12 @@ func _gamepad_name_input(btn: int) -> void:
 			else:
 				var i := NAME_CHARS.find(t[-1])
 				name_edit.text = t.left(t.length() - 1) + NAME_CHARS[wrapi(i + dir, 0, NAME_CHARS.length())]
-		JOY_BUTTON_A, JOY_BUTTON_DPAD_RIGHT:
+		JOY_BUTTON_X, JOY_BUTTON_DPAD_RIGHT:
 			if t.length() < name_edit.max_length:
 				name_edit.text = t + "A"
 		JOY_BUTTON_B, JOY_BUTTON_DPAD_LEFT:
 			name_edit.text = t.left(t.length() - 1)
-		JOY_BUTTON_START, JOY_BUTTON_Y, JOY_BUTTON_X:
+		JOY_BUTTON_A, JOY_BUTTON_START, JOY_BUTTON_Y:
 			_on_name_submitted()
 
 func _nudge_difficulty(dir: int) -> void:
