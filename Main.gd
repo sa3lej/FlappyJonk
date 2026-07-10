@@ -987,9 +987,8 @@ func _build_retro_card() -> void:
 	_retro_label("< >  PICK YOUR POISON", 8, 0.019, Color(0.55, 0.62, 0.85), Vector3(0, -3.3, 5.0))
 
 	var green := Color(0.55, 0.76, 0.55)
-	_retro_label("(C) THE WALT JONK COMPANY", 16, 0.0145, green, Vector3(0, -4.4, 5.0))
-	_retro_label("PRODUCED BY LARS-ERIK LTD.", 16, 0.0145, green, Vector3(0, -5.0, 5.0))
-	_retro_label("BÄÄR U.S.A. INC", 16, 0.0145, green, Vector3(0, -5.6, 5.0))
+	_retro_label("(C) LARS-ERIK JONSSON", 16, 0.0145, green, Vector3(0, -4.7, 5.0))
+	_retro_label("GITHUB.COM/SA3LEJ", 16, 0.0145, green, Vector3(0, -5.3, 5.0))
 	_retro_label("SPACE / CLICK TO START  F = FULLSCREEN  M = SOUND  T = MUSIC", 8, 0.0125, Color(0.72, 0.78, 0.95), Vector3(0, -7.3, 5.0))
 	card_snd_label = _retro_label("SOUND OFF", 8, 0.019, Color(0.95, 0.5, 0.4), Vector3(0, 6.35, 5.0))
 	card_snd_label.visible = muted
