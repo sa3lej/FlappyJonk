@@ -276,6 +276,12 @@ var lb_fetch: HTTPRequest
 var lb_submit: HTTPRequest
 var world_scores: Array = []
 var _net_enabled := true
+# ONLY a successful /top10 fetch makes the world board authoritative.
+# An empty world list is NOT offline — a cleared board must still be
+# the board everyone plays on. size()>0 as an online test caused scores
+# to silently land on the local list right after every world reset.
+var _world_online := false
+var _pending_submit := {}   # the score in flight, so a failed POST can't eat it
 
 func _build_net() -> void:
 	# regression tests must never touch the real leaderboard
@@ -287,6 +293,7 @@ func _build_net() -> void:
 	lb_submit = HTTPRequest.new()
 	lb_submit.timeout = 6.0
 	add_child(lb_submit)
+	lb_submit.request_completed.connect(_on_world_submitted)
 
 func _fetch_world() -> void:
 	if not _net_enabled:
@@ -298,12 +305,26 @@ func _submit_world(nm: String, sc: int, beers: int) -> void:
 	if not _net_enabled or _pilot_flew:
 		return
 	lb_submit.cancel_request()
+	_pending_submit = { "name": nm, "score": sc }
 	lb_submit.request(LB_URL + "/submit",
 		["Content-Type: application/json", "X-Jonk-Key: " + LB_KEY],
 		HTTPClient.METHOD_POST,
 		JSON.stringify({ "name": nm, "score": sc, "beers": beers }))
 	# refresh a moment later so your name shows up on the world list
 	get_tree().create_timer(2.0).timeout.connect(_fetch_world)
+
+func _on_world_submitted(result: int, code: int, _headers: PackedStringArray, _body: PackedByteArray) -> void:
+	if _pending_submit.is_empty():
+		return   # an admin call, not a score
+	var p := _pending_submit
+	_pending_submit = {}
+	if result != HTTPRequest.RESULT_SUCCESS or code != 200:
+		# the net lied mid-flight — keep the run on the family list
+		# instead of losing it, and stop trusting the world board
+		_world_online = false
+		_save_score(str(p.name), int(p.score))
+		_refresh_scores_label(gameover_scores)
+		_toast("WORLD SAVE FAILED - KEPT LOCALLY")
 
 func _clear_world_scores() -> void:
 	# only works where user://admin_key.txt exists (Lars-Erik's machine) —
@@ -323,14 +344,20 @@ func _clear_world_scores() -> void:
 
 func _on_world_fetched(result: int, code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
 	if result != HTTPRequest.RESULT_SUCCESS or code != 200:
-		return   # offline is fine — the local list carries the screen
+		_world_online = false   # offline is fine — the local list carries the screen
+		return
 	var data = JSON.parse_string(body.get_string_from_utf8())
 	if typeof(data) != TYPE_ARRAY:
+		_world_online = false
 		return
 	world_scores = data
+	_world_online = true   # even an EMPTY board is the world board
 	_refresh_scores_label(gameover_scores)
-	if state == STATE_MENU and world_scores.size() > 0:
-		hiscore_label.text = "WORLD HI  %d %s" % [int(world_scores[0].score), str(world_scores[0].name)]
+	if state == STATE_MENU:
+		if world_scores.size() > 0:
+			hiscore_label.text = "WORLD HI  %d %s" % [int(world_scores[0].score), str(world_scores[0].name)]
+		else:
+			hiscore_label.text = "WORLD HI  0"
 
 func _build_audio() -> void:
 	# all audio goes through the import system (load) so the same code
@@ -1182,9 +1209,9 @@ func _die() -> void:
 	gameover_box.visible = true
 	pilot_label.visible = false
 	# never mix the boards: you qualify against exactly the list on the
-	# screen — the world board when online, the local family list only as
-	# the offline fallback. (Clearing one list can't sneak you onto the other.)
-	var board: Array = world_scores if world_scores.size() > 0 else high_scores
+	# screen — the world board when online (even a freshly cleared, empty
+	# one), the local family list only as the offline fallback.
+	var board: Array = world_scores if _world_online else high_scores
 	var qualifies := board.size() < MAX_SCORES or score > int(board.back().score)
 	if _pilot_flew:
 		# machines don't get on the family leaderboard
@@ -1342,7 +1369,7 @@ func _on_name_submitted(_t := "") -> void:
 		nm = "ANONYMOUS"   # Jonk doesn't get credit for other people's runs
 	# the name goes to the board you qualified on — world when online,
 	# the local family list only when offline
-	if world_scores.size() > 0:
+	if _world_online:
 		_submit_world(nm, score, _beer_count)
 	else:
 		_save_score(nm, score)
@@ -1646,9 +1673,11 @@ func _refresh_scores_label(label: Label, limit := MAX_SCORES) -> void:
 	if label == null:
 		return
 	# the world list when we have it, the local family list otherwise
-	var online := world_scores.size() > 0
+	var online := _world_online
 	var src: Array = world_scores if online else high_scores
 	var lines := ["- WORLD HI-SCORES -" if online else "- HIGH SCORES -", ""]
+	if online and src.is_empty():
+		lines.append("NO SCORES YET - BE FIRST!")
 	var rank := 1
 	for e in src:
 		if rank > limit:
