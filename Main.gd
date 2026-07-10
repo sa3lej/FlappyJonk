@@ -436,14 +436,59 @@ func _build_environment() -> void:
 	add_child(we)
 
 func _build_ground() -> void:
-	# lunar regolith whose surface is the kill floor, plus a distant ridge
-	_add(_box(Vector3(90, 4, 10)), _mat(Color(0.32, 0.32, 0.36), 0.9), Vector3(0, FLOOR_Y - 2.0, -2))
-	_add(_box(Vector3(90, 0.1, 10)), _mat(Color(0.46, 0.46, 0.51), 0.85), Vector3(0, FLOOR_Y + 0.02, -2))
-	_add(_box(Vector3(90, 2.5, 4)), _mat(Color(0.16, 0.16, 0.20), 1.0), Vector3(0, FLOOR_Y - 0.4, -13))
-	# craters pocking the surface
-	for i in range(8):
-		var cr := _add(_cyl(randf_range(0.4, 1.0), 0.07), _mat(Color(0.22, 0.22, 0.26), 0.95), Vector3(randf_range(-16, 16), FLOOR_Y + 0.08, randf_range(-3.5, 0.5)))
-		cr.scale.x = randf_range(1.0, 1.6)
+	# the martian surface — real photos, like everything else in this scene.
+	# Up close: Curiosity's rippled ground (PIA11242). On the horizon: a dark
+	# dune sea (PIA20755). Both NASA/JPL. The strip's top edge IS the kill floor.
+	# deep-rust backing box, in case any gap ever peeks past the photo strips
+	_add(_box(Vector3(90, 4, 10)), _mat(Color(0.23, 0.12, 0.09), 0.95), Vector3(0, FLOOR_Y - 2.0, -2))
+	# dusty orange haze hugging the horizon — the dune sea silhouettes against it
+	var glow := GradientTexture2D.new()
+	glow.gradient = Gradient.new()
+	glow.gradient.offsets = PackedFloat32Array([0.0, 1.0])
+	glow.gradient.colors = PackedColorArray([Color(0.9, 0.45, 0.2, 0.0), Color(0.9, 0.45, 0.2, 0.22)])
+	glow.fill_from = Vector2(0, 0)
+	glow.fill_to = Vector2(0, 1)
+	var gq := QuadMesh.new()
+	gq.size = Vector2(90, 1.3)
+	var gm := StandardMaterial3D.new()
+	gm.albedo_texture = glow
+	gm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	gm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	gm.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	var gmi := MeshInstance3D.new()
+	gmi.mesh = gq
+	gmi.material_override = gm
+	gmi.position = Vector3(0, FLOOR_Y + 0.65, -15)
+	add_child(gmi)
+	# the dune sea pokes above the floor line, behind the parked rockets
+	_photo_strip("res://mars_far.jpg", Vector2(90, 1.8), 4.0, Vector3(0, FLOOR_Y - 0.05, -14))
+	# the near ground: only its top sliver is on screen, the rest dives
+	# below the frame — rocks get cut by the screen edge like a real photo
+	_photo_strip("res://mars_ground.jpg", Vector2(90, 4.3), 6.0, Vector3(0, FLOOR_Y - 2.13, 3.01))
+	# scattered rust rocks break the straight horizon line
+	for i in range(12):
+		var s := Vector3(randf_range(0.25, 0.8), randf_range(0.12, 0.3), 0.3)
+		var shade := randf_range(-0.03, 0.05)
+		var rk := _add(_box(s), _mat(Color(0.30 + shade, 0.15 + shade * 0.6, 0.11 + shade * 0.4), 0.95),
+			Vector3(randf_range(-16, 16), FLOOR_Y + s.y * randf_range(0.1, 0.45), randf_range(-9, -4)))
+		rk.rotation.z = randf_range(-0.25, 0.25)
+
+func _photo_strip(res_path: String, size: Vector2, tiles: float, pos: Vector3) -> MeshInstance3D:
+	# a horizontally-tiling photo band; the textures wrap seamlessly
+	if not _tex_cache.has(res_path):
+		_tex_cache[res_path] = load(res_path)
+	var q := QuadMesh.new()
+	q.size = size
+	var m := StandardMaterial3D.new()
+	m.albedo_texture = _tex_cache[res_path]
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.uv1_scale = Vector3(tiles, 1, 1)
+	var mi := MeshInstance3D.new()
+	mi.mesh = q
+	mi.material_override = m
+	mi.position = pos
+	add_child(mi)
+	return mi
 
 var rocket: Node3D
 var rocket_flame: Node3D
