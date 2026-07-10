@@ -1133,7 +1133,12 @@ func _die() -> void:
 		final_label.text = "SCORE %d" % score
 	gameover_box.visible = true
 	pilot_label.visible = false
-	var qualifies := high_scores.size() < MAX_SCORES or score > int(high_scores.back().score)
+	# the world board counts too: a run that misses the local family list can
+	# still deserve a spot online. Offline (no world data) = local rules only.
+	var local_ok := high_scores.size() < MAX_SCORES or score > int(high_scores.back().score)
+	var world_ok := world_scores.size() > 0 and \
+		(world_scores.size() < MAX_SCORES or score > int(world_scores.back().score))
+	var qualifies := local_ok or world_ok
 	if _pilot_flew:
 		# machines don't get on the family leaderboard
 		entering_name = false
