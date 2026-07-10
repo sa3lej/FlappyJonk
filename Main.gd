@@ -1204,7 +1204,7 @@ func _die() -> void:
 	elif qualifies and score > 0:
 		entering_name = true
 		name_row.visible = true
-		hint_label.text = "NEW HI-SCORE! TYPE YOUR NAME\nUP/DOWN = LETTER   X = LOCK\nX AGAIN = SAVE   CIRCLE = ERASE"
+		hint_label.text = "YOU SURE KNOW HOW TO JONK\nNEW HI-SCORE! TYPE YOUR NAME\nUP/DOWN = LETTER   X = LOCK\nX AGAIN = SAVE   CIRCLE = ERASE"
 		name_edit.text = ""
 		_pad_editing = false
 		name_edit.grab_focus()
