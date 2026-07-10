@@ -60,13 +60,12 @@ const MUSIC_PATH := "res://title_music.wav"    # chiptune loop (tools/make_title
 const LB_URL := "https://flappyjonk.jonsson-es.workers.dev"
 const LB_KEY := "b70fc75f28b4161e23edbbc657ed3a946314db3a"
 
-# difficulty select on the retro title card (NES style): gap size, base
-# scroll speed, ramp per point, speed cap
-const DIFF_NAMES := ["EASY", "NORMAL", "DIFFICULT"]
-const DIFF_GAP := [6.0, 5.0, 4.15]
-const DIFF_BASE_SPEED := [5.0, 5.5, 6.3]
-const DIFF_SPEED_PER := [0.12, 0.16, 0.22]
-const DIFF_MAX_SPEED := [9.5, 10.5, 11.8]
+# one difficulty for everyone: gap size, base scroll speed, ramp per
+# point, speed cap (the old NORMAL)
+const PIPE_GAP_RUN := 5.0
+const RUN_BASE_SPEED := 5.5
+const RUN_SPEED_PER := 0.16
+const RUN_MAX_SPEED := 10.5
 
 # ---------------------------------------------------------------------------
 # STATE
@@ -74,11 +73,10 @@ const DIFF_MAX_SPEED := [9.5, 10.5, 11.8]
 enum { STATE_MENU, STATE_PLAY, STATE_DEAD }
 
 var state := STATE_MENU
-var difficulty := 1
-var pipe_gap: float = DIFF_GAP[1]
-var run_base_speed: float = DIFF_BASE_SPEED[1]
-var run_speed_per: float = DIFF_SPEED_PER[1]
-var run_max_speed: float = DIFF_MAX_SPEED[1]
+var pipe_gap: float = PIPE_GAP_RUN
+var run_base_speed: float = RUN_BASE_SPEED
+var run_speed_per: float = RUN_SPEED_PER
+var run_max_speed: float = RUN_MAX_SPEED
 var velocity_y := 0.0
 var score := 0
 var speed := BASE_SPEED
@@ -117,6 +115,7 @@ var hint_label: Label
 # ---------------------------------------------------------------------------
 func _ready() -> void:
 	randomize()
+	Input.mouse_mode = Input.MOUSE_MODE_HIDDEN
 	_load_scores()
 	_load_settings()
 	_build_net()
@@ -771,13 +770,12 @@ func _build_glasses(model: Node3D) -> void:
 # ---------------------------------------------------------------------------
 # THE 80s TITLE CARD — the menu IS a DuckTales-NES-style screen: royal blue,
 # fat tilted pixel logo with pixel-art LEGO-Jonk peeking over it (beer
-# raised, of course), blinking GAME START, a difficulty row that actually
-# works, and green corporate small print. Font: Press Start 2P (OFL).
+# raised, of course), blinking GAME START, and green corporate small
+# print. Font: Press Start 2P (OFL).
 # ---------------------------------------------------------------------------
 var retro_root: Node3D
 var retro_font: FontFile
 var start_label: Label3D
-var diff_label: Label3D
 var hiscore_label: Label3D
 var card_jonk: MeshInstance3D
 
@@ -1047,9 +1045,6 @@ func _build_retro_card() -> void:
 
 	hiscore_label = _retro_label("HI-SCORE  0", 16, 0.017, Color(0.92, 0.92, 0.92), Vector3(0, 6.9, 5.0))
 	start_label = _retro_label("GAME START", 16, 0.022, Color(0.92, 0.92, 0.92), Vector3(0, -1.9, 5.0))
-	diff_label = _retro_label("", 16, 0.0165, Color(0.91, 0.55, 0.58), Vector3(0, -2.7, 5.0))
-	_refresh_diff_label()
-	_retro_label("< >  PICK YOUR POISON", 8, 0.019, Color(0.55, 0.62, 0.85), Vector3(0, -3.3, 5.0))
 
 	var green := Color(0.55, 0.76, 0.55)
 	_retro_label("(C) LARS-ERIK JONSSON", 16, 0.0145, green, Vector3(0, -4.7, 5.0))
@@ -1063,12 +1058,6 @@ func _build_retro_card() -> void:
 	card_jonk = _build_jonk_sprite()
 	card_jonk.position = Vector3(-2.6, 3.87, 4.6)
 	card_jonk.rotation_degrees = Vector3(0, 0, 5.0)
-
-func _refresh_diff_label() -> void:
-	var parts := []
-	for i in range(DIFF_NAMES.size()):
-		parts.append(("*" + DIFF_NAMES[i]) if i == difficulty else DIFF_NAMES[i])
-	diff_label.text = "   ".join(parts)
 
 func _animate_card(_delta: float, tsec: float) -> void:
 	# Jonk stands perfectly still (he has a beer to hold) —
@@ -1149,11 +1138,6 @@ func _start_game() -> void:
 	_clear_pipes()
 	score = 0
 	_beer_count = 0
-	# apply the difficulty picked on the title card
-	pipe_gap = DIFF_GAP[difficulty]
-	run_base_speed = DIFF_BASE_SPEED[difficulty]
-	run_speed_per = DIFF_SPEED_PER[difficulty]
-	run_max_speed = DIFF_MAX_SPEED[difficulty]
 	speed = run_base_speed
 	since_spawn = PIPE_SPACING
 	_pilot_flew = false
@@ -1197,12 +1181,11 @@ func _die() -> void:
 		final_label.text = "SCORE %d" % score
 	gameover_box.visible = true
 	pilot_label.visible = false
-	# the world board counts too: a run that misses the local family list can
-	# still deserve a spot online. Offline (no world data) = local rules only.
-	var local_ok := high_scores.size() < MAX_SCORES or score > int(high_scores.back().score)
-	var world_ok := world_scores.size() > 0 and \
-		(world_scores.size() < MAX_SCORES or score > int(world_scores.back().score))
-	var qualifies := local_ok or world_ok
+	# never mix the boards: you qualify against exactly the list on the
+	# screen — the world board when online, the local family list only as
+	# the offline fallback. (Clearing one list can't sneak you onto the other.)
+	var board: Array = world_scores if world_scores.size() > 0 else high_scores
+	var qualifies := board.size() < MAX_SCORES or score > int(board.back().score)
 	if _pilot_flew:
 		# machines don't get on the family leaderboard
 		entering_name = false
@@ -1237,7 +1220,14 @@ var gameover_scores: Label
 # ---------------------------------------------------------------------------
 # INPUT
 # ---------------------------------------------------------------------------
+var _mouse_idle := 0.0
+
 func _input(event: InputEvent) -> void:
+	# arcade cabinets don't have a mouse arrow: the cursor only exists
+	# while the mouse is actually being used (see the idle timer in _process)
+	if event is InputEventMouseMotion:
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		_mouse_idle = 0.0
 	# pad name entry runs BEFORE the GUI layer, so the focused LineEdit
 	# can never swallow or reinterpret a controller button
 	if event is InputEventJoypadButton and event.pressed and state == STATE_DEAD and entering_name:
@@ -1262,10 +1252,6 @@ func _unhandled_input(event: InputEvent) -> void:
 		match event.keycode:
 			KEY_SPACE:
 				_primary_action()
-			KEY_LEFT:
-				_nudge_difficulty(-1)
-			KEY_RIGHT:
-				_nudge_difficulty(1)
 			KEY_M:
 				_toggle_mute()
 			KEY_T:
@@ -1295,10 +1281,6 @@ func _unhandled_input(event: InputEvent) -> void:
 					_primary_action()
 			JOY_BUTTON_A, JOY_BUTTON_X:
 				_primary_action()
-			JOY_BUTTON_DPAD_LEFT:
-				_nudge_difficulty(-1)
-			JOY_BUTTON_DPAD_RIGHT:
-				_nudge_difficulty(1)
 			JOY_BUTTON_START:
 				_toggle_fullscreen()
 
@@ -1332,12 +1314,6 @@ func _gamepad_name_input(btn: int) -> void:
 			name_edit.text = t.left(t.length() - 1)
 			_pad_editing = false
 
-func _nudge_difficulty(dir: int) -> void:
-	if state != STATE_MENU:
-		return
-	difficulty = clampi(difficulty + dir, 0, DIFF_NAMES.size() - 1)
-	_refresh_diff_label()
-
 func _toggle_fullscreen() -> void:
 	var w := get_window()
 	w.mode = Window.MODE_WINDOWED if w.mode == Window.MODE_FULLSCREEN else Window.MODE_FULLSCREEN
@@ -1364,8 +1340,12 @@ func _on_name_submitted(_t := "") -> void:
 	var nm := name_edit.text.strip_edges().to_upper()
 	if nm == "":
 		nm = "ANONYMOUS"   # Jonk doesn't get credit for other people's runs
-	_save_score(nm, score)
-	_submit_world(nm, score, _beer_count)
+	# the name goes to the board you qualified on — world when online,
+	# the local family list only when offline
+	if world_scores.size() > 0:
+		_submit_world(nm, score, _beer_count)
+	else:
+		_save_score(nm, score)
 	entering_name = false
 	name_row.visible = false
 	name_edit.release_focus()
@@ -1389,6 +1369,10 @@ func _on_name_gui_input(event: InputEvent) -> void:
 # MAIN LOOP
 # ---------------------------------------------------------------------------
 func _process(delta: float) -> void:
+	# the mouse arrow vanishes after a moment of stillness
+	_mouse_idle += delta
+	if _mouse_idle > 1.5 and Input.mouse_mode == Input.MOUSE_MODE_VISIBLE:
+		Input.mouse_mode = Input.MOUSE_MODE_HIDDEN
 	# drifting clouds everywhere
 	for c in clouds:
 		c.position.x -= 0.4 * delta
