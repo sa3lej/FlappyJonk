@@ -441,40 +441,44 @@ func _build_ground() -> void:
 	# dune sea (PIA20755). Both NASA/JPL. The strip's top edge IS the kill floor.
 	# deep-rust backing box, in case any gap ever peeks past the photo strips
 	_add(_box(Vector3(90, 4, 10)), _mat(Color(0.23, 0.12, 0.09), 0.95), Vector3(0, FLOOR_Y - 2.0, -2))
-	# dusty orange haze hugging the horizon — the dune sea silhouettes against it
-	var glow := GradientTexture2D.new()
-	glow.gradient = Gradient.new()
-	glow.gradient.offsets = PackedFloat32Array([0.0, 1.0])
-	glow.gradient.colors = PackedColorArray([Color(0.9, 0.45, 0.2, 0.0), Color(0.9, 0.45, 0.2, 0.22)])
-	glow.fill_from = Vector2(0, 0)
-	glow.fill_to = Vector2(0, 1)
-	var gq := QuadMesh.new()
-	gq.size = Vector2(90, 1.3)
-	var gm := StandardMaterial3D.new()
-	gm.albedo_texture = glow
-	gm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	gm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	gm.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
-	var gmi := MeshInstance3D.new()
-	gmi.mesh = gq
-	gmi.material_override = gm
-	gmi.position = Vector3(0, FLOOR_Y + 0.65, -15)
-	add_child(gmi)
-	# the dune sea pokes above the floor line, behind the parked rockets
-	_photo_strip("res://mars_far.jpg", Vector2(90, 1.8), 4.0, Vector3(0, FLOOR_Y - 0.05, -14))
-	# the near ground: only its top sliver is on screen, the rest dives
-	# below the frame — rocks get cut by the screen edge like a real photo
-	_photo_strip("res://mars_ground.jpg", Vector2(90, 4.3), 6.0, Vector3(0, FLOOR_Y - 2.13, 3.01))
-	# scattered rust rocks break the straight horizon line
-	for i in range(12):
-		var s := Vector3(randf_range(0.25, 0.8), randf_range(0.12, 0.3), 0.3)
-		var shade := randf_range(-0.03, 0.05)
-		var rk := _add(_box(s), _mat(Color(0.30 + shade, 0.15 + shade * 0.6, 0.11 + shade * 0.4), 0.95),
-			Vector3(randf_range(-16, 16), FLOOR_Y + s.y * randf_range(0.1, 0.45), randf_range(-9, -4)))
-		rk.rotation.z = randf_range(-0.25, 0.25)
+	# ONE continuous Curiosity panorama (crater rim over the plain), split at
+	# the floor line: mountains render behind the parked rockets, the plain
+	# renders in front so pillar bottoms sink into the ground. Same texture,
+	# same tiling — the seam at the floor is pixel-continuous, one soil.
+	const LAND_SPLIT := 0.5222   # texture row of the floor line (235/450)
+	_photo_strip("res://mars_land.png", Vector2(90, 2.64), 2.0,
+		Vector3(0, FLOOR_Y + 1.32, -14), true, 0.0, LAND_SPLIT)
+	var plain := _photo_strip("res://mars_land.png", Vector2(90, 2.42), 2.0,
+		Vector3(0, FLOOR_Y - 1.21, 3.01), false, LAND_SPLIT, 1.0)
+	# a whisper darker in front: marks the kill line as a depth step, not a stripe
+	(plain.material_override as StandardMaterial3D).albedo_color = Color(0.90, 0.88, 0.88)
 
-func _photo_strip(res_path: String, size: Vector2, tiles: float, pos: Vector3) -> MeshInstance3D:
-	# a horizontally-tiling photo band; the textures wrap seamlessly
+func _contact_shadow(size: Vector2, pos: Vector3) -> void:
+	# a soft dark ellipse that grounds a parked prop on the plain
+	var tex := GradientTexture2D.new()
+	tex.gradient = Gradient.new()
+	tex.gradient.offsets = PackedFloat32Array([0.0, 0.75, 1.0])
+	tex.gradient.colors = PackedColorArray([
+		Color(0.05, 0.02, 0.01, 0.55), Color(0.05, 0.02, 0.01, 0.20), Color(0.05, 0.02, 0.01, 0.0)])
+	tex.fill = GradientTexture2D.FILL_RADIAL
+	tex.fill_from = Vector2(0.5, 0.5)
+	tex.fill_to = Vector2(1.0, 0.5)
+	var q := QuadMesh.new()
+	q.size = size
+	var m := StandardMaterial3D.new()
+	m.albedo_texture = tex
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	var mi := MeshInstance3D.new()
+	mi.mesh = q
+	mi.material_override = m
+	mi.position = pos
+	add_child(mi)
+
+func _photo_strip(res_path: String, size: Vector2, tiles: float, pos: Vector3,
+		alpha := false, v_from := 0.0, v_to := 1.0) -> MeshInstance3D:
+	# a horizontally-tiling photo band; the textures wrap seamlessly.
+	# v_from/v_to select a vertical slice of the texture.
 	if not _tex_cache.has(res_path):
 		_tex_cache[res_path] = load(res_path)
 	var q := QuadMesh.new()
@@ -482,7 +486,10 @@ func _photo_strip(res_path: String, size: Vector2, tiles: float, pos: Vector3) -
 	var m := StandardMaterial3D.new()
 	m.albedo_texture = _tex_cache[res_path]
 	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	m.uv1_scale = Vector3(tiles, 1, 1)
+	m.uv1_scale = Vector3(tiles, v_to - v_from, 1)
+	m.uv1_offset = Vector3(0, v_from, 0)
+	if alpha:
+		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	var mi := MeshInstance3D.new()
 	mi.mesh = q
 	mi.material_override = m
@@ -513,9 +520,15 @@ func _build_bayou() -> void:
 	# real rockets parked on the surface — a Soyuz, a New Shepard booster,
 	# and a Falcon 9, each lifted from real photos. All different, no clones.
 	# Sizes keep true-ish relative proportions (photo aspect ratios).
-	_photo_quad("res://rocket_soyuz.png", Vector2(0.38, 3.4), false, Vector3(-11.5, FLOOR_Y + 1.7, -12))
+	_photo_quad("res://rocket_soyuz.png", Vector2(0.38, 3.4), false, Vector3(-11.5, FLOOR_Y + 1.55, -12))
 	_photo_quad("res://rocket_shepard.png", Vector2(0.9, 2.0), false, Vector3(-2.5, FLOOR_Y + 1.0, -10.5))
-	_photo_quad("res://rocket_falcon.png", Vector2(0.4, 2.7), false, Vector3(8.0, FLOOR_Y + 1.35, -13))
+	# the falcon sinks a touch below the line: its ragged engine cut is
+	# buried in the dust instead of balancing on a jagged point
+	_photo_quad("res://rocket_falcon.png", Vector2(0.4, 2.7), false, Vector3(8.0, FLOOR_Y + 1.0, -13))
+	# soft contact shadows glue the rockets to the ground
+	_contact_shadow(Vector2(1.7, 0.26), Vector3(-11.5, FLOOR_Y + 0.05, -11.9))
+	_contact_shadow(Vector2(2.2, 0.30), Vector3(-2.5, FLOOR_Y + 0.05, -10.4))
+	_contact_shadow(Vector2(1.7, 0.26), Vector3(8.0, FLOOR_Y + 0.05, -12.9))
 
 	# the flying rocket — a real Falcon 9, lifted out of a Space Force launch
 	# photo (public domain), with a glowing exhaust attached

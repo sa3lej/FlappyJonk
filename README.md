@@ -58,9 +58,9 @@ The space theme uses real photographs:
 - **Obstacles**: Pillars of Creation, JWST NIRCam (NASA, ESA, CSA, STScI).
 - **Astronaut**: Bruce McCandless II untethered EVA, 1984 (NASA, public domain).
 - **Earth**: "The Blue Marble", Apollo 17 (NASA, public domain).
-- **Martian ground**: Curiosity Mastcam at the Bagnold Dunes — near strip from
-  PIA11242, distant dune sea from PIA20755 (NASA/JPL-Caltech/MSSS, public domain).
-  Cropped, made tileable, and rust-graded with `tools/make_mars_ground.py`.
+- **Martian landscape**: "Curiosity Views Gale Crater's Rim" panorama, PIA26671
+  (NASA/JPL-Caltech/MSSS, public domain) — sky cut along the skyline, dusk-graded,
+  made tileable with `tools/make_mars_land.py`; split at the floor line in-game.
 - **Title font**: "Press Start 2P" (`pixel_font.ttf`) — Cody "CodeMan38" Boisclair,
   SIL Open Font License 1.1.
 

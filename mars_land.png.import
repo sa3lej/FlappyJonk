@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://v1aj6emq72ml"
-path="res://.godot/imported/mars_far.jpg-3a7f024138f521becbf26adf5859cc53.ctex"
+uid="uid://i54mdf4xweaf"
+path="res://.godot/imported/mars_land.png-2244770ecc386d9cbebb8b4e767a6a90.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://mars_far.jpg"
-dest_files=["res://.godot/imported/mars_far.jpg-3a7f024138f521becbf26adf5859cc53.ctex"]
+source_file="res://mars_land.png"
+dest_files=["res://.godot/imported/mars_land.png-2244770ecc386d9cbebb8b4e767a6a90.ctex"]
 
 [params]
 
