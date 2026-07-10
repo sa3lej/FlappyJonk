@@ -51,6 +51,7 @@ const MAX_SCORES := 10
 const FLAP_SFX_PATH := "res://jonk_flap.wav"   # Jonk's voice memo, one per flap
 const CRASH_SFX_PATH := "res://crash.wav"      # for meeting the Pillars of Creation
 const BEER_SFX_PATH := "res://beer.wav"        # for catching a bäär
+const PRAISE_SFX_PATH := "res://jonk_praise.wav"   # for making the list
 const MUSIC_PATH := "res://title_music.wav"    # chiptune loop (tools/make_title_music.py)
 
 # the world leaderboard — a Cloudflare Worker in front of a D1 database
@@ -90,6 +91,7 @@ var _shake := 0.0
 var flap_sfx: AudioStreamPlayer
 var crash_sfx: AudioStreamPlayer
 var beer_sfx: AudioStreamPlayer
+var praise_sfx: AudioStreamPlayer
 var menu_music: AudioStreamPlayer
 var music_on := false            # title tune is opt-in: T toggles it
 var muted := false
@@ -347,6 +349,11 @@ func _build_audio() -> void:
 	add_child(beer_sfx)
 	if ResourceLoader.exists(BEER_SFX_PATH):
 		beer_sfx.stream = load(BEER_SFX_PATH)
+	praise_sfx = AudioStreamPlayer.new()
+	praise_sfx.volume_db = -3.0   # recorded hotter than the JONK war cry
+	add_child(praise_sfx)
+	if ResourceLoader.exists(PRAISE_SFX_PATH):
+		praise_sfx.stream = load(PRAISE_SFX_PATH)
 	menu_music = AudioStreamPlayer.new()
 	menu_music.volume_db = -6.0
 	add_child(menu_music)
@@ -1205,6 +1212,10 @@ func _die() -> void:
 		entering_name = true
 		name_row.visible = true
 		hint_label.text = "YOU SURE KNOW HOW TO JONK\nNEW HI-SCORE! TYPE YOUR NAME\nUP/DOWN = LETTER   X = LOCK\nX AGAIN = SAVE   CIRCLE = ERASE"
+		# the man himself says it too — after the crash has had its moment
+		get_tree().create_timer(0.6).timeout.connect(func() -> void:
+			if state == STATE_DEAD and praise_sfx.stream != null:
+				praise_sfx.play())
 		name_edit.text = ""
 		_pad_editing = false
 		name_edit.grab_focus()
