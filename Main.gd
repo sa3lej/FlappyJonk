@@ -1753,6 +1753,17 @@ func _safe_top() -> float:
 	var inset := float(DisplayServer.get_display_safe_area().position.y)
 	return inset / win.y * get_viewport().get_visible_rect().size.y
 
+func _safe_bottom() -> float:
+	# same idea for the home-indicator strip at the bottom edge
+	if not OS.has_feature("mobile"):
+		return 0.0
+	var win := Vector2(DisplayServer.window_get_size())
+	if win.y <= 0.0:
+		return 0.0
+	var safe := DisplayServer.get_display_safe_area()
+	var inset := win.y - float(safe.position.y + safe.size.y)
+	return maxf(inset, 0.0) / win.y * get_viewport().get_visible_rect().size.y
+
 func _build_ui() -> void:
 	ui = CanvasLayer.new()
 	add_child(ui)
@@ -1774,10 +1785,20 @@ func _build_ui() -> void:
 	audio_row.add_child(snd_btn)
 	audio_row.add_child(mus_btn)
 	ui.add_child(audio_row)
-	audio_row.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
-	audio_row.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	audio_row.offset_top = 78 + _safe_top()   # below the WORLD HI ticker line
-	audio_row.offset_right = -14
+	if OS.has_feature("mobile"):
+		# phones: bottom center, above the home indicator — the top of the
+		# taller view belongs to the WORLD HI ticker
+		audio_row.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
+		audio_row.grow_horizontal = Control.GROW_DIRECTION_BOTH
+		audio_row.grow_vertical = Control.GROW_DIRECTION_BEGIN
+		audio_row.offset_bottom = -(14 + _safe_bottom())
+	else:
+		# desktop: top right, below the WORLD HI ticker — the bottom edge
+		# holds the keyboard-hints line
+		audio_row.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+		audio_row.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+		audio_row.offset_top = 78 + _safe_top()
+		audio_row.offset_right = -14
 	_refresh_audio_buttons()
 
 	# blinking tell-tale for the secret autopilot — no silent cheating
