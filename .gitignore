@@ -2,3 +2,4 @@ build/
 backend/.jonk_key
 backend/node_modules/
 appstore/screenshots/
+appstore/*.provisionprofile
