@@ -109,13 +109,20 @@ var final_label: Label
 var name_row: Control
 var name_edit: LineEdit
 var hint_label: Label
+var audio_row: Control            # touch buttons: phones have no M or T key
+var snd_btn: Button
+var mus_btn: Button
 
 # ---------------------------------------------------------------------------
 # SETUP
 # ---------------------------------------------------------------------------
 func _ready() -> void:
 	randomize()
-	Input.mouse_mode = Input.MOUSE_MODE_HIDDEN
+	# touch screens have no cursor to hide — and setting a mouse mode there
+	# logs a warning EVERY frame via the idle timer below
+	_has_mouse = DisplayServer.has_feature(DisplayServer.FEATURE_MOUSE)
+	if _has_mouse:
+		Input.mouse_mode = Input.MOUSE_MODE_HIDDEN
 	_load_scores()
 	_load_settings()
 	_build_net()
@@ -419,6 +426,7 @@ func _toggle_music() -> void:
 		menu_music.play()
 	elif not music_on:
 		menu_music.stop()
+	_refresh_audio_buttons()
 	_toast("MUSIC ON" if music_on else "MUSIC OFF")
 
 func _toggle_mute() -> void:
@@ -426,6 +434,7 @@ func _toggle_mute() -> void:
 	AudioServer.set_bus_mute(0, muted)
 	_save_settings()
 	card_snd_label.visible = muted
+	_refresh_audio_buttons()
 	_toast("SOUND OFF" if muted else "SOUND ON")
 
 func _build_environment() -> void:
@@ -451,13 +460,16 @@ func _build_environment() -> void:
 	env.glow_bloom = 0.04
 	env.glow_hdr_threshold = 1.05
 
-	env.ssao_enabled = true
-	env.ssao_radius = 0.7
-	env.ssao_intensity = 1.4
+	# screen-space effects only exist in the Forward+ renderer — the phone
+	# build runs Mobile, where setting them just logs warnings
+	if RenderingServer.get_current_rendering_method() == "forward_plus":
+		env.ssao_enabled = true
+		env.ssao_radius = 0.7
+		env.ssao_intensity = 1.4
+		env.ssr_enabled = true
 
 	# space is a vacuum — no haze
 	env.fog_enabled = false
-	env.ssr_enabled = true
 
 	# punchy animation-style grade: saturated and crisp
 	env.adjustment_enabled = true
@@ -1154,6 +1166,7 @@ func _goto_menu() -> void:
 	retro_root.visible = true
 	gameover_box.visible = false
 	score_label.visible = false
+	audio_row.visible = true
 	var top := int(high_scores[0].score) if high_scores.size() > 0 else 0
 	hiscore_label.text = "HI-SCORE  %d" % top
 	_fetch_world()
@@ -1181,6 +1194,8 @@ func _start_game() -> void:
 	gameover_box.visible = false
 	score_label.visible = true
 	score_label.text = "0"
+	# mid-flight taps must flap, never land on a settings button
+	audio_row.visible = false
 
 func _die() -> void:
 	if state != STATE_PLAY:
@@ -1208,6 +1223,7 @@ func _die() -> void:
 		final_label.text = "SCORE %d" % score
 	gameover_box.visible = true
 	pilot_label.visible = false
+	audio_row.visible = true
 	# never mix the boards: you qualify against exactly the list on the
 	# screen — the world board when online (even a freshly cleared, empty
 	# one), the local family list only as the offline fallback.
@@ -1221,7 +1237,10 @@ func _die() -> void:
 	elif qualifies and score > 0:
 		entering_name = true
 		name_row.visible = true
-		hint_label.text = "YOU SURE KNOW HOW TO JONK\nNEW HI-SCORE! TYPE YOUR NAME\nUP/DOWN = LETTER   X = LOCK\nX AGAIN = SAVE   CIRCLE = ERASE"
+		if OS.has_feature("mobile"):
+			hint_label.text = "YOU SURE KNOW HOW TO JONK\nNEW HI-SCORE! TYPE YOUR NAME\nTHEN TAP SAVE"
+		else:
+			hint_label.text = "YOU SURE KNOW HOW TO JONK\nNEW HI-SCORE! TYPE YOUR NAME\nUP/DOWN = LETTER   X = LOCK\nX AGAIN = SAVE   CIRCLE = ERASE"
 		# the man himself says it too — after the crash has had its moment
 		get_tree().create_timer(0.6).timeout.connect(func() -> void:
 			if state == STATE_DEAD and praise_sfx.stream != null:
@@ -1233,7 +1252,7 @@ func _die() -> void:
 	else:
 		entering_name = false
 		name_row.visible = false
-		hint_label.text = "SPACE / CLICK TO PLAY AGAIN"
+		hint_label.text = "TAP TO PLAY AGAIN" if OS.has_feature("mobile") else "SPACE / CLICK TO PLAY AGAIN"
 	_refresh_scores_label(gameover_scores)
 
 var _beer_count := 0
@@ -1248,11 +1267,12 @@ var gameover_scores: Label
 # INPUT
 # ---------------------------------------------------------------------------
 var _mouse_idle := 0.0
+var _has_mouse := true
 
 func _input(event: InputEvent) -> void:
 	# arcade cabinets don't have a mouse arrow: the cursor only exists
 	# while the mouse is actually being used (see the idle timer in _process)
-	if event is InputEventMouseMotion:
+	if _has_mouse and event is InputEventMouseMotion:
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 		_mouse_idle = 0.0
 	# pad name entry runs BEFORE the GUI layer, so the focused LineEdit
@@ -1376,7 +1396,7 @@ func _on_name_submitted(_t := "") -> void:
 	entering_name = false
 	name_row.visible = false
 	name_edit.release_focus()
-	hint_label.text = "SPACE / CLICK TO PLAY AGAIN"
+	hint_label.text = "TAP TO PLAY AGAIN" if OS.has_feature("mobile") else "SPACE / CLICK TO PLAY AGAIN"
 	_refresh_scores_label(gameover_scores)
 
 func _on_name_gui_input(event: InputEvent) -> void:
@@ -1398,7 +1418,7 @@ func _on_name_gui_input(event: InputEvent) -> void:
 func _process(delta: float) -> void:
 	# the mouse arrow vanishes after a moment of stillness
 	_mouse_idle += delta
-	if _mouse_idle > 1.5 and Input.mouse_mode == Input.MOUSE_MODE_VISIBLE:
+	if _has_mouse and _mouse_idle > 1.5 and Input.mouse_mode == Input.MOUSE_MODE_VISIBLE:
 		Input.mouse_mode = Input.MOUSE_MODE_HIDDEN
 	# drifting clouds everywhere
 	for c in clouds:
@@ -1700,6 +1720,17 @@ func _make_label(size: int, color := Color.WHITE) -> Label:
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	return l
 
+func _safe_top() -> float:
+	# canvas-space height of the phone's notch / Dynamic Island strip —
+	# UI pinned to the top edge must start below it. Zero on desktop.
+	if not OS.has_feature("mobile"):
+		return 0.0
+	var win := Vector2(DisplayServer.window_get_size())
+	if win.y <= 0.0:
+		return 0.0
+	var inset := float(DisplayServer.get_display_safe_area().position.y)
+	return inset / win.y * get_viewport().get_visible_rect().size.y
+
 func _build_ui() -> void:
 	ui = CanvasLayer.new()
 	add_child(ui)
@@ -1708,8 +1739,24 @@ func _build_ui() -> void:
 	score_label = _make_label(56)
 	score_label.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
 	score_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	score_label.position.y = 40
+	score_label.position.y = 40 + _safe_top()
 	ui.add_child(score_label)
+
+	# sound / music toggles (top right) — keyboard has M and T, touch has these
+	audio_row = HBoxContainer.new()
+	audio_row.add_theme_constant_override("separation", 10)
+	snd_btn = _audio_button()
+	snd_btn.pressed.connect(_toggle_mute)
+	mus_btn = _audio_button()
+	mus_btn.pressed.connect(_toggle_music)
+	audio_row.add_child(snd_btn)
+	audio_row.add_child(mus_btn)
+	ui.add_child(audio_row)
+	audio_row.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+	audio_row.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	audio_row.offset_top = 78 + _safe_top()   # below the WORLD HI ticker line
+	audio_row.offset_right = -14
+	_refresh_audio_buttons()
 
 	# blinking tell-tale for the secret autopilot — no silent cheating
 	pilot_label = _make_label(16, Color(1.0, 0.85, 0.3))
@@ -1728,6 +1775,7 @@ func _build_ui() -> void:
 	ui.add_child(gameover_box)
 	var gv := VBoxContainer.new()
 	gv.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	gv.mouse_filter = Control.MOUSE_FILTER_IGNORE   # full-rect: must not eat taps
 	gv.alignment = BoxContainer.ALIGNMENT_CENTER
 	gv.add_theme_constant_override("separation", 12)
 	gameover_box.add_child(gv)
@@ -1759,11 +1807,29 @@ func _build_ui() -> void:
 	hint_label = _make_label(16, Color(0.8, 1.0, 0.85))
 	gv.add_child(_center(hint_label, ""))
 
+func _audio_button() -> Button:
+	var b := Button.new()
+	b.add_theme_font_override("font", retro_font)
+	b.add_theme_font_size_override("font_size", 14)
+	b.custom_minimum_size = Vector2(0, 44)   # finger-sized tap target
+	# no keyboard focus: SPACE must always flap, never re-press this button
+	b.focus_mode = Control.FOCUS_NONE
+	return b
+
+func _refresh_audio_buttons() -> void:
+	if snd_btn == null:
+		return
+	snd_btn.text = "SOUND OFF" if muted else "SOUND ON"
+	mus_btn.text = "MUSIC ON" if music_on else "MUSIC OFF"
+
 func _panel() -> Control:
 	# just enough dark for the text to pop — space stays the backdrop
 	var p := ColorRect.new()
 	p.color = Color(0.02, 0.03, 0.08, 0.3)
 	p.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	# a ColorRect eats clicks by default — on touch screens that made the
+	# game-over screen a dead end (no SPACE key to fall back on)
+	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return p
 
 func _center(label: Label, text: String) -> Control:
