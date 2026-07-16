@@ -1113,8 +1113,8 @@ func _build_retro_card() -> void:
 	var green := Color(0.55, 0.76, 0.55)
 	_retro_label("(C) LARS-ERIK JONSSON", 16, 0.0145, green, Vector3(0, -4.7, 5.0))
 	_retro_label("GITHUB.COM/SA3LEJ", 16, 0.0145, green, Vector3(0, -5.3, 5.0))
-	_retro_label("TAP TO START" if _mobile else "SPACE / CLICK TO START  F = FULLSCREEN  M = SOUND  T = MUSIC",
-		8, 0.0125, Color(0.72, 0.78, 0.95), Vector3(0, -7.3, 5.0))
+	_retro_label("TAP TO START" if _mobile else "SPACE / CLICK TO START  F = FULLSCREEN",
+		8, 0.0125, Color(0.72, 0.78, 0.95), Vector3(0, -6.5, 5.0))
 
 	# pixel-art LEGO-Jonk standing proudly ON his own logo, bäär raised
 	# high, leaning with the letters — nothing covers him up here
@@ -1784,11 +1784,7 @@ func _safe_bottom() -> float:
 
 func _layout_ui() -> void:
 	score_label.position.y = 40 + _safe_top()
-	if _mobile:
-		audio_row.offset_bottom = -(14 + _safe_bottom())
-	else:
-		audio_row.offset_top = 78 + _safe_top()
-		audio_row.offset_right = -14
+	audio_row.offset_bottom = -(14 + _safe_bottom())
 
 func _build_ui() -> void:
 	ui = CanvasLayer.new()
@@ -1810,17 +1806,10 @@ func _build_ui() -> void:
 	audio_row.add_child(snd_btn)
 	audio_row.add_child(mus_btn)
 	ui.add_child(audio_row)
-	if _mobile:
-		# phones: bottom center, above the home indicator — the top of the
-		# taller view belongs to the WORLD HI ticker
-		audio_row.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
-		audio_row.grow_horizontal = Control.GROW_DIRECTION_BOTH
-		audio_row.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	else:
-		# desktop: top right, below the WORLD HI ticker — the bottom edge
-		# holds the keyboard-hints line
-		audio_row.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
-		audio_row.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	# bottom center on every platform — same game, same furniture
+	audio_row.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
+	audio_row.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	audio_row.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	_refresh_audio_buttons()
 	# safe-area insets move when the device rotates — re-place on every resize
 	_layout_ui()
