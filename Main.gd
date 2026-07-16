@@ -119,6 +119,10 @@ var gameover_vbox: Control        # slides up when the virtual keyboard opens
 # ---------------------------------------------------------------------------
 func _ready() -> void:
 	randomize()
+	# touch layout: real phones/tablets, or --mobile after "--" on the command
+	# line — that's how the screenshot tool captures the store shots with the
+	# layout the device will actually show
+	_mobile = OS.has_feature("mobile") or "--mobile" in OS.get_cmdline_user_args()
 	# touch screens have no cursor to hide — and setting a mouse mode there
 	# logs a warning EVERY frame via the idle timer below
 	_has_mouse = DisplayServer.has_feature(DisplayServer.FEATURE_MOUSE)
@@ -1111,7 +1115,8 @@ func _build_retro_card() -> void:
 	var green := Color(0.55, 0.76, 0.55)
 	_retro_label("(C) LARS-ERIK JONSSON", 16, 0.0145, green, Vector3(0, -4.7, 5.0))
 	_retro_label("GITHUB.COM/SA3LEJ", 16, 0.0145, green, Vector3(0, -5.3, 5.0))
-	_retro_label("SPACE / CLICK TO START  F = FULLSCREEN  M = SOUND  T = MUSIC", 8, 0.0125, Color(0.72, 0.78, 0.95), Vector3(0, -7.3, 5.0))
+	_retro_label("TAP TO START" if _mobile else "SPACE / CLICK TO START  F = FULLSCREEN  M = SOUND  T = MUSIC",
+		8, 0.0125, Color(0.72, 0.78, 0.95), Vector3(0, -7.3, 5.0))
 	card_snd_label = _retro_label("SOUND OFF", 8, 0.019, Color(0.95, 0.5, 0.4), Vector3(0, 6.35, 5.0))
 	card_snd_label.visible = muted
 
@@ -1260,7 +1265,7 @@ func _die() -> void:
 	elif qualifies and score > 0:
 		entering_name = true
 		name_row.visible = true
-		if OS.has_feature("mobile"):
+		if _mobile:
 			hint_label.text = "YOU SURE KNOW HOW TO JONK\nNEW HI-SCORE! TYPE YOUR NAME\nTHEN TAP SAVE"
 		else:
 			hint_label.text = "YOU SURE KNOW HOW TO JONK\nNEW HI-SCORE! TYPE YOUR NAME\nUP/DOWN = LETTER   X = LOCK\nX AGAIN = SAVE   CIRCLE = ERASE"
@@ -1275,7 +1280,7 @@ func _die() -> void:
 	else:
 		entering_name = false
 		name_row.visible = false
-		hint_label.text = "TAP TO PLAY AGAIN" if OS.has_feature("mobile") else "SPACE / CLICK TO PLAY AGAIN"
+		hint_label.text = "TAP TO PLAY AGAIN" if _mobile else "SPACE / CLICK TO PLAY AGAIN"
 	_refresh_scores_label(gameover_scores)
 
 var _beer_count := 0
@@ -1291,6 +1296,7 @@ var gameover_scores: Label
 # ---------------------------------------------------------------------------
 var _mouse_idle := 0.0
 var _has_mouse := true
+var _mobile := false             # touch layout: real device, or --mobile flag
 
 func _input(event: InputEvent) -> void:
 	# arcade cabinets don't have a mouse arrow: the cursor only exists
@@ -1419,7 +1425,7 @@ func _on_name_submitted(_t := "") -> void:
 	entering_name = false
 	name_row.visible = false
 	name_edit.release_focus()
-	hint_label.text = "TAP TO PLAY AGAIN" if OS.has_feature("mobile") else "SPACE / CLICK TO PLAY AGAIN"
+	hint_label.text = "TAP TO PLAY AGAIN" if _mobile else "SPACE / CLICK TO PLAY AGAIN"
 	_refresh_scores_label(gameover_scores)
 
 func _on_name_gui_input(event: InputEvent) -> void:
@@ -1801,7 +1807,7 @@ func _build_ui() -> void:
 	audio_row.add_child(snd_btn)
 	audio_row.add_child(mus_btn)
 	ui.add_child(audio_row)
-	if OS.has_feature("mobile"):
+	if _mobile:
 		# phones: bottom center, above the home indicator — the top of the
 		# taller view belongs to the WORLD HI ticker
 		audio_row.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
