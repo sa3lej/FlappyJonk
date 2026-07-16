@@ -32,7 +32,7 @@ const SUPPORT_HTML = `<!doctype html>
 </style>
 <h1>Flappy Jonk — Support</h1>
 <p>Something broken? A question? An unbeatable score that demands
-recognition? Email <a href="mailto:l@jonsson.es">l@jonsson.es</a> and a
+recognition? Email <a href="mailto:flappyjonk@jonsson.es">flappyjonk@jonsson.es</a> and a
 human (the one on the title screen, in fact) will reply.</p>
 <h2>Common questions</h2>
 <p><strong>How do I play?</strong> Tap to flap. Dodge the pillars. Catch
@@ -76,10 +76,10 @@ cannot be recovered from the hash.</p>
 kept until removed.</p>
 <h2>Removal</h2>
 <p>Want an entry removed from the leaderboard? Email
-<a href="mailto:l@jonsson.es">l@jonsson.es</a> with the name on the entry
+<a href="mailto:flappyjonk@jonsson.es">flappyjonk@jonsson.es</a> with the name on the entry
 and it will be deleted.</p>
 <h2>Contact</h2>
-<p>Lars-Erik Jonsson — <a href="mailto:l@jonsson.es">l@jonsson.es</a></p>
+<p>Lars-Erik Jonsson — <a href="mailto:flappyjonk@jonsson.es">flappyjonk@jonsson.es</a></p>
 </html>`;
 
 export default {
