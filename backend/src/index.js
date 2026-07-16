@@ -107,6 +107,7 @@ export default {
 
     if (req.method === "POST" && url.pathname === "/submit") {
       if (req.headers.get("X-Jonk-Key") !== env.JONK_KEY) {
+        console.log("submit rejected: bad key");
         return new Response("nope", { status: 401 });
       }
       let b;

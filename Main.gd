@@ -306,11 +306,24 @@ func _build_net() -> void:
 	add_child(lb_submit)
 	lb_submit.request_completed.connect(_on_world_submitted)
 
+var _fetch_backoff := 2.0       # seconds until the next retry, doubling to 30
+var _retry_queued := false
+
 func _fetch_world() -> void:
 	if not _net_enabled:
 		return
 	lb_fetch.cancel_request()
 	lb_fetch.request(LB_URL + "/top10")
+
+func _retry_fetch_world() -> void:
+	# one retry in flight at a time — menu re-entries must not stack timers
+	if _retry_queued or not _net_enabled:
+		return
+	_retry_queued = true
+	get_tree().create_timer(_fetch_backoff).timeout.connect(func() -> void:
+		_retry_queued = false
+		_fetch_world())
+	_fetch_backoff = minf(_fetch_backoff * 2.0, 30.0)
 
 func _submit_world(nm: String, sc: int, beers: int) -> void:
 	if not _net_enabled or _pilot_flew:
@@ -356,11 +369,14 @@ func _clear_world_scores() -> void:
 func _on_world_fetched(result: int, code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
 	if result != HTTPRequest.RESULT_SUCCESS or code != 200:
 		_world_online = false   # offline is fine — the local list carries the screen
-		return
+		_retry_fetch_world()    # ...but a cold app start often loses the race
+		return                  # against the radio waking up — don't give up
 	var data = JSON.parse_string(body.get_string_from_utf8())
 	if typeof(data) != TYPE_ARRAY:
 		_world_online = false
+		_retry_fetch_world()
 		return
+	_fetch_backoff = 2.0        # next hiccup starts the ladder from the bottom
 	world_scores = data
 	_world_online = true   # even an EMPTY board is the world board
 	_refresh_scores_label(gameover_scores)
