@@ -66,7 +66,7 @@ device and never leave it.</p>
 <h2>The world leaderboard</h2>
 <p>If you earn a place on the world leaderboard and choose to submit your
 score, the game sends exactly this to our server: the name you type in
-(anything you like), your score, how many beers you caught, and the time of
+(anything you like), your score, how many bäärs you caught, and the time of
 submission. The name and score are shown publicly in the game's world
 top-10 list.</p>
 <p>To prevent abuse, the server also stores a salted one-way hash of your
