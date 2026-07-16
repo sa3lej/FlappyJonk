@@ -121,17 +121,26 @@ export default {
       const beers = Math.floor(Number(b.beers ?? 0));
 
       // sanity: scores are small integers, and every beer is 3 of the points
-      if (!Number.isFinite(score) || score < 1 || score > MAX_PLAUSIBLE_SCORE)
+      if (!Number.isFinite(score) || score < 1 || score > MAX_PLAUSIBLE_SCORE) {
+        console.log("submit rejected: implausible score", { name, score });
         return new Response("nice try", { status: 400 });
-      if (!Number.isFinite(beers) || beers < 0 || beers * 3 > score)
+      }
+      if (!Number.isFinite(beers) || beers < 0 || beers * 3 > score) {
+        console.log("submit rejected: beer math", { name, score, beers });
         return new Response("nice try", { status: 400 });
+      }
 
-      // rate limit: one submit per IP per 15 seconds (hashed, see ipHash)
+      // rate limit: bursts of quick deaths are legitimate flappy play (a
+      // bad run lasts four seconds) — cap volume per minute, not the gap
+      // between runs. Hashed IP, see ipHash.
       const ip = await ipHash(req.headers.get("CF-Connecting-IP") ?? "unknown", env.JONK_KEY);
       const recent = await env.DB.prepare(
-        "SELECT COUNT(*) AS n FROM scores WHERE ip = ? AND created_at > datetime('now', '-15 seconds')"
+        "SELECT COUNT(*) AS n FROM scores WHERE ip = ? AND created_at > datetime('now', '-60 seconds')"
       ).bind(ip).first();
-      if (recent.n > 0) return new Response("slow down", { status: 429 });
+      if (recent.n >= 8) {
+        console.log("submit rejected: rate limit", { name, score });
+        return new Response("slow down", { status: 429 });
+      }
 
       await env.DB.prepare(
         "INSERT INTO scores (name, score, beers, ip) VALUES (?, ?, ?, ?)"
