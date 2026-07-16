@@ -1786,6 +1786,14 @@ func _safe_bottom() -> float:
 	var inset := win.y - float(safe.position.y + safe.size.y)
 	return maxf(inset, 0.0) / win.y * get_viewport().get_visible_rect().size.y
 
+func _layout_ui() -> void:
+	score_label.position.y = 40 + _safe_top()
+	if _mobile:
+		audio_row.offset_bottom = -(14 + _safe_bottom())
+	else:
+		audio_row.offset_top = 78 + _safe_top()
+		audio_row.offset_right = -14
+
 func _build_ui() -> void:
 	ui = CanvasLayer.new()
 	add_child(ui)
@@ -1794,10 +1802,9 @@ func _build_ui() -> void:
 	score_label = _make_label(56)
 	score_label.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
 	score_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	score_label.position.y = 40 + _safe_top()
 	ui.add_child(score_label)
 
-	# sound / music toggles (top right) — keyboard has M and T, touch has these
+	# sound / music toggles — keyboard has M and T, touch has these
 	audio_row = HBoxContainer.new()
 	audio_row.add_theme_constant_override("separation", 10)
 	snd_btn = _audio_button()
@@ -1813,15 +1820,15 @@ func _build_ui() -> void:
 		audio_row.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
 		audio_row.grow_horizontal = Control.GROW_DIRECTION_BOTH
 		audio_row.grow_vertical = Control.GROW_DIRECTION_BEGIN
-		audio_row.offset_bottom = -(14 + _safe_bottom())
 	else:
 		# desktop: top right, below the WORLD HI ticker — the bottom edge
 		# holds the keyboard-hints line
 		audio_row.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
 		audio_row.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-		audio_row.offset_top = 78 + _safe_top()
-		audio_row.offset_right = -14
 	_refresh_audio_buttons()
+	# safe-area insets move when the device rotates — re-place on every resize
+	_layout_ui()
+	get_viewport().size_changed.connect(_layout_ui)
 
 	# blinking tell-tale for the secret autopilot — no silent cheating
 	pilot_label = _make_label(16, Color(1.0, 0.85, 0.3))
