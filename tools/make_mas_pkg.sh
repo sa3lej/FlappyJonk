@@ -23,6 +23,10 @@ godot --headless --export-release "macOS" 2>&1 | grep -iE "^error" && exit 1
 VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Contents/Info.plist")
 /usr/libexec/PlistBuddy -c "Add :LSMinimumSystemVersion string $MIN_OS" "$APP/Contents/Info.plist" 2>/dev/null \
   || /usr/libexec/PlistBuddy -c "Set :LSMinimumSystemVersion $MIN_OS" "$APP/Contents/Info.plist"
+# only exempt encryption (the OS's own HTTPS) — skips the export
+# compliance dialog on every upload; Godot sets this on iOS but not macOS
+/usr/libexec/PlistBuddy -c "Add :ITSAppUsesNonExemptEncryption bool false" "$APP/Contents/Info.plist" 2>/dev/null \
+  || /usr/libexec/PlistBuddy -c "Set :ITSAppUsesNonExemptEncryption false" "$APP/Contents/Info.plist"
 
 # re-sign with the entitlements Godot used (plist edits void the signature)
 codesign -d --entitlements :- "$APP" > /tmp/mas_entitlements.plist 2>/dev/null
