@@ -19,6 +19,32 @@ async function ipHash(ip, pepper) {
     .join("");
 }
 
+const SUPPORT_HTML = `<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flappy Jonk — Support</title>
+<style>
+  body { font-family: -apple-system, system-ui, sans-serif; max-width: 40em;
+         margin: 2em auto; padding: 0 1em; line-height: 1.6; color: #222; }
+  @media (prefers-color-scheme: dark) { body { background: #0a0f1a; color: #ddd; } }
+  h1 { font-size: 1.5em; }
+</style>
+<h1>Flappy Jonk — Support</h1>
+<p>Something broken? A question? An unbeatable score that demands
+recognition? Email <a href="mailto:l@jonsson.es">l@jonsson.es</a> and a
+human (the one on the title screen, in fact) will reply.</p>
+<h2>Common questions</h2>
+<p><strong>How do I play?</strong> Tap to flap. Dodge the pillars. Catch
+the bäär. That is the entire manual.</p>
+<p><strong>Where are the sound controls?</strong> On the title screen —
+bottom of the screen on iPhone and iPad, top right on Mac (or press M
+for sound, T for music).</p>
+<p><strong>How do I get my name off the world leaderboard?</strong>
+Email the name on the entry to the address above and it will be removed.</p>
+<p><a href="/privacy">Privacy policy</a></p>
+</html>`;
+
 const PRIVACY_HTML = `<!doctype html>
 <html lang="en">
 <meta charset="utf-8">
@@ -59,6 +85,12 @@ and it will be deleted.</p>
 export default {
   async fetch(req, env) {
     const url = new URL(req.url);
+
+    if (req.method === "GET" && url.pathname === "/support") {
+      return new Response(SUPPORT_HTML, {
+        headers: { "content-type": "text/html; charset=utf-8" },
+      });
+    }
 
     if (req.method === "GET" && url.pathname === "/privacy") {
       return new Response(PRIVACY_HTML, {
