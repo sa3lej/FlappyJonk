@@ -112,6 +112,7 @@ var hint_label: Label
 var audio_row: Control            # touch buttons: phones have no M or T key
 var snd_btn: Button
 var mus_btn: Button
+var gameover_vbox: Control        # slides up when the virtual keyboard opens
 
 # ---------------------------------------------------------------------------
 # SETUP
@@ -1442,6 +1443,21 @@ func _process(delta: float) -> void:
 	_mouse_idle += delta
 	if _has_mouse and _mouse_idle > 1.5 and Input.mouse_mode == Input.MOUSE_MODE_VISIBLE:
 		Input.mouse_mode = Input.MOUSE_MODE_HIDDEN
+
+	# the phone keyboard rises over the centered game-over panel: slide the
+	# panel up just enough that the name box (and the hint under it) stay
+	# visible, and settle back down when the keyboard goes away
+	var kb_shift := 0.0
+	if entering_name:
+		var kb := float(DisplayServer.virtual_keyboard_get_height())
+		if kb > 0.0:
+			var canvas_h := get_viewport().get_visible_rect().size.y
+			var win_h := float(DisplayServer.window_get_size().y)
+			var kb_canvas := kb / win_h * canvas_h
+			# where the panel's lowest text ends when unshifted
+			var content_bottom := hint_label.get_global_rect().end.y - gameover_vbox.position.y
+			kb_shift = maxf(0.0, content_bottom - (canvas_h - kb_canvas) - 12.0)
+	gameover_vbox.position.y = lerpf(gameover_vbox.position.y, -kb_shift, minf(1.0, delta * 12.0))
 	# drifting clouds everywhere
 	for c in clouds:
 		c.position.x -= 0.4 * delta
@@ -1849,6 +1865,7 @@ func _build_ui() -> void:
 
 	hint_label = _make_label(16, Color(0.8, 1.0, 0.85))
 	gv.add_child(_center(hint_label, ""))
+	gameover_vbox = gv
 
 func _audio_button() -> Button:
 	var b := Button.new()
