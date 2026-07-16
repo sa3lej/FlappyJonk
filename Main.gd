@@ -93,7 +93,6 @@ var praise_sfx: AudioStreamPlayer
 var menu_music: AudioStreamPlayer
 var music_on := false            # title tune is opt-in: T toggles it
 var muted := false
-var card_snd_label: Label3D
 var flap_arm_l: Node3D
 var flap_arm_r: Node3D
 var _flap_pulse := 0.0
@@ -438,7 +437,6 @@ func _toggle_mute() -> void:
 	muted = not muted
 	AudioServer.set_bus_mute(0, muted)
 	_save_settings()
-	card_snd_label.visible = muted
 	_refresh_audio_buttons()
 	_toast("SOUND OFF" if muted else "SOUND ON")
 
@@ -1117,8 +1115,6 @@ func _build_retro_card() -> void:
 	_retro_label("GITHUB.COM/SA3LEJ", 16, 0.0145, green, Vector3(0, -5.3, 5.0))
 	_retro_label("TAP TO START" if _mobile else "SPACE / CLICK TO START  F = FULLSCREEN  M = SOUND  T = MUSIC",
 		8, 0.0125, Color(0.72, 0.78, 0.95), Vector3(0, -7.3, 5.0))
-	card_snd_label = _retro_label("SOUND OFF", 8, 0.019, Color(0.95, 0.5, 0.4), Vector3(0, 6.35, 5.0))
-	card_snd_label.visible = muted
 
 	# pixel-art LEGO-Jonk standing proudly ON his own logo, bäär raised
 	# high, leaning with the letters — nothing covers him up here
@@ -1884,9 +1880,27 @@ func _audio_button() -> Button:
 	var b := Button.new()
 	b.add_theme_font_override("font", retro_font)
 	b.add_theme_font_size_override("font_size", 14)
-	b.custom_minimum_size = Vector2(0, 44)   # finger-sized tap target
+	b.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.7))
+	b.add_theme_constant_override("outline_size", 4)
+	b.custom_minimum_size = Vector2(150, 44)   # finger-sized, equal widths
 	# no keyboard focus: SPACE must always flap, never re-press this button
 	b.focus_mode = Control.FOCUS_NONE
+	# square dark panels in the game-over backdrop's palette — the stock
+	# grey theme looked like a dialog box that wandered into an arcade
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.02, 0.03, 0.08, 0.55)
+	sb.border_color = Color(0.72, 0.78, 0.95, 0.35)
+	sb.set_border_width_all(2)
+	sb.content_margin_left = 14
+	sb.content_margin_right = 14
+	b.add_theme_stylebox_override("normal", sb)
+	var hb: StyleBoxFlat = sb.duplicate()
+	hb.bg_color = Color(0.08, 0.10, 0.20, 0.65)
+	hb.border_color = Color(0.72, 0.78, 0.95, 0.7)
+	b.add_theme_stylebox_override("hover", hb)
+	var pb: StyleBoxFlat = sb.duplicate()
+	pb.bg_color = Color(0.01, 0.01, 0.04, 0.75)
+	b.add_theme_stylebox_override("pressed", pb)
 	return b
 
 func _refresh_audio_buttons() -> void:
@@ -1894,6 +1908,14 @@ func _refresh_audio_buttons() -> void:
 		return
 	snd_btn.text = "SOUND OFF" if muted else "SOUND ON"
 	mus_btn.text = "MUSIC ON" if music_on else "MUSIC OFF"
+	_audio_button_state_color(snd_btn, not muted)
+	_audio_button_state_color(mus_btn, music_on)
+
+func _audio_button_state_color(b: Button, on: bool) -> void:
+	# ON glows arcade green, OFF goes ashen — readable at a glance
+	var c := Color(0.62, 0.95, 0.66) if on else Color(0.75, 0.60, 0.58)
+	for role in ["font_color", "font_hover_color", "font_pressed_color"]:
+		b.add_theme_color_override(role, c)
 
 func _panel() -> Control:
 	# just enough dark for the text to pop — space stays the backdrop
