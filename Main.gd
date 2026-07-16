@@ -1113,6 +1113,8 @@ func _build_retro_card() -> void:
 	var green := Color(0.55, 0.76, 0.55)
 	_retro_label("(C) LARS-ERIK JONSSON", 16, 0.0145, green, Vector3(0, -4.7, 5.0))
 	_retro_label("GITHUB.COM/SA3LEJ", 16, 0.0145, green, Vector3(0, -5.3, 5.0))
+	_retro_label("V" + str(ProjectSettings.get_setting("application/config/version", "?")),
+		8, 0.011, Color(0.55, 0.76, 0.55, 0.75), Vector3(0, -5.85, 5.0))
 	_retro_label("TAP TO START" if _mobile else "SPACE / CLICK TO START  F = FULLSCREEN",
 		8, 0.0125, Color(0.72, 0.78, 0.95), Vector3(0, -6.5, 5.0))
 
