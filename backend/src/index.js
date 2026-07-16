@@ -135,7 +135,7 @@ export default {
       // between runs. Hashed IP, see ipHash.
       const ip = await ipHash(req.headers.get("CF-Connecting-IP") ?? "unknown", env.JONK_KEY);
       const recent = await env.DB.prepare(
-        "SELECT COUNT(*) AS n FROM scores WHERE ip = ? AND created_at > datetime('now', '-60 seconds')"
+        "SELECT COUNT(*) AS n FROM scores WHERE ip = ? AND created_at > datetime('now', '-10 seconds')"
       ).bind(ip).first();
       if (recent.n >= 8) {
         console.log("submit rejected: rate limit", { name, score });
