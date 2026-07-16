@@ -1,5 +1,6 @@
 // FLAPPY JONK — world leaderboard.
 // GET  /top10   -> [{name, score}, ...] best first
+// GET  /privacy -> privacy policy (the App Store requires a public URL)
 // POST /submit  -> {name, score, beers} with X-Jonk-Key header
 //
 // The database has no public address: this Worker IS the API. The key in
@@ -8,9 +9,62 @@
 
 const MAX_PLAUSIBLE_SCORE = 500; // human record 62, the autopilot peaked at 109
 
+// rate limiting needs "same sender within 15s", never the address itself:
+// store a salted one-way hash so the database holds no readable IPs
+async function ipHash(ip, pepper) {
+  const data = new TextEncoder().encode(ip + pepper);
+  const digest = await crypto.subtle.digest("SHA-256", data);
+  return [...new Uint8Array(digest.slice(0, 16))]
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+const PRIVACY_HTML = `<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flappy Jonk — Privacy Policy</title>
+<style>
+  body { font-family: -apple-system, system-ui, sans-serif; max-width: 40em;
+         margin: 2em auto; padding: 0 1em; line-height: 1.6; color: #222; }
+  @media (prefers-color-scheme: dark) { body { background: #0a0f1a; color: #ddd; } }
+  h1 { font-size: 1.5em; }
+</style>
+<h1>Flappy Jonk — Privacy Policy</h1>
+<p><em>Effective 16 July 2026</em></p>
+<p>Flappy Jonk is a small arcade game. It shows no ads, uses no analytics or
+tracking of any kind, and requires no account.</p>
+<h2>On your device</h2>
+<p>Your settings (sound/music) and local high scores are stored only on your
+device and never leave it.</p>
+<h2>The world leaderboard</h2>
+<p>If you earn a place on the world leaderboard and choose to submit your
+score, the game sends exactly this to our server: the name you type in
+(anything you like), your score, how many beers you caught, and the time of
+submission. The name and score are shown publicly in the game's world
+top-10 list.</p>
+<p>To prevent abuse, the server also stores a salted one-way hash of your
+network address alongside the entry. The address itself is never stored and
+cannot be recovered from the hash.</p>
+<p>Leaderboard data is stored with Cloudflare (our hosting provider) and
+kept until removed.</p>
+<h2>Removal</h2>
+<p>Want an entry removed from the leaderboard? Email
+<a href="mailto:l@jonsson.es">l@jonsson.es</a> with the name on the entry
+and it will be deleted.</p>
+<h2>Contact</h2>
+<p>Lars-Erik Jonsson — <a href="mailto:l@jonsson.es">l@jonsson.es</a></p>
+</html>`;
+
 export default {
   async fetch(req, env) {
     const url = new URL(req.url);
+
+    if (req.method === "GET" && url.pathname === "/privacy") {
+      return new Response(PRIVACY_HTML, {
+        headers: { "content-type": "text/html; charset=utf-8" },
+      });
+    }
 
     if (req.method === "GET" && url.pathname === "/top10") {
       const { results } = await env.DB.prepare(
@@ -40,8 +94,8 @@ export default {
       if (!Number.isFinite(beers) || beers < 0 || beers * 3 > score)
         return new Response("nice try", { status: 400 });
 
-      // rate limit: one submit per IP per 15 seconds
-      const ip = req.headers.get("CF-Connecting-IP") ?? "unknown";
+      // rate limit: one submit per IP per 15 seconds (hashed, see ipHash)
+      const ip = await ipHash(req.headers.get("CF-Connecting-IP") ?? "unknown", env.JONK_KEY);
       const recent = await env.DB.prepare(
         "SELECT COUNT(*) AS n FROM scores WHERE ip = ? AND created_at > datetime('now', '-15 seconds')"
       ).bind(ip).first();
