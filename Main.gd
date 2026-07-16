@@ -971,10 +971,11 @@ func _jonk_grid() -> Array:
 	_rect(g, 27, 59, 14, 4, "L")
 	return g
 
-func _build_jonk_sprite() -> MeshInstance3D:
+func _jonk_image() -> Image:
 	# SNES-era pipeline: the 8-bit grid is upscaled 2x with the Scale2x/EPX
 	# algorithm (rounds the staircase corners), then auto-shaded — top-lit
 	# highlights, bottom shadows — and finally traced with a dark outline.
+	# Also the boot-splash artwork: tools/make_splash.gd renders it to PNG.
 	var grid := _jonk_grid()
 	var h := grid.size()
 	var w: int = grid[0].size()
@@ -1035,11 +1036,14 @@ func _build_jonk_sprite() -> MeshInstance3D:
 				img.set_pixel(x, y, p.darkened(0.3))
 			elif right_open:
 				img.set_pixel(x, y, p.darkened(0.12))
+	return img
 
+func _build_jonk_sprite() -> MeshInstance3D:
+	var img := _jonk_image()
 	var tex := ImageTexture.create_from_image(img)
 	var q := QuadMesh.new()
 	var px := 0.023                        # 2x pixels, same world size
-	q.size = Vector2(w2 * px, h2 * px)
+	q.size = Vector2(img.get_width() * px, img.get_height() * px)
 	var m := StandardMaterial3D.new()
 	m.albedo_texture = tex
 	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
