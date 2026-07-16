@@ -606,6 +606,24 @@ func _build_camera() -> void:
 	cam.position = Vector3(0, 0, 22)
 	cam.current = true
 	add_child(cam)
+	_update_cam_aspect()
+	get_viewport().size_changed.connect(_update_cam_aspect)
+
+const DESIGN_ASPECT := 540.0 / 960.0
+
+func _update_cam_aspect() -> void:
+	# the design frame is 540x960: a KEEP_HEIGHT camera crops the SIDES on
+	# anything narrower (iPhones cut the F off FLAPPY, and pipes appeared
+	# with less warning). Narrow screens instead keep the design width and
+	# reveal extra sky/ground; wide screens (desktop fullscreen) keep the
+	# design height as before.
+	var s := Vector2(get_window().size)
+	if s.y > 0 and s.x / s.y < DESIGN_ASPECT:
+		cam.keep_aspect = Camera3D.KEEP_WIDTH
+		cam.size = CAM_SIZE * DESIGN_ASPECT
+	else:
+		cam.keep_aspect = Camera3D.KEEP_HEIGHT
+		cam.size = CAM_SIZE
 
 func _build_lights() -> void:
 	var key := DirectionalLight3D.new()
