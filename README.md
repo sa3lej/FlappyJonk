@@ -4,6 +4,15 @@ A flappy-bird game rendered with **real 3D** (lights, soft shadows, bloom, proce
 sky) but played flat/2D through an orthographic camera. The "bird" is Jonk's floating
 head. Dodge the pipes, catch the beer cans, chase the high score.
 
+> **Provenance**: this repository is the complete, original source of the
+> *Flappy Jonk* app distributed on the App Store (bundle id
+> `es.jonsson.flappyjonk`, Apple team 4F49PY7FVQ). Every line was written
+> by hand for this game — no templates, no purchased code. The commit
+> history documents the full development. Character art is generated
+> programmatically (see `_jonk_grid` in `Main.gd`); space photography is
+> credited NASA/ESO public-domain material (see Image credits below);
+> all voice lines were recorded by the developer.
+
 ## Play
 
 - **Double-click** `Flappy Jonk` in Godot's project list, or from a terminal:
