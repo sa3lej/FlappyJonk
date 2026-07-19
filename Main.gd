@@ -189,10 +189,16 @@ func _run_restart_test() -> void:
 	var grace_holds: bool = entering_name and name_edit.text.is_empty()
 	print("TEST grace_blocks_pad_mash=%s" % grace_holds)
 	await get_tree().create_timer(0.9).timeout   # grace over
+	# RIGHT with nothing pending must START a letter, never save — users
+	# pressing RIGHT to "move on" once lost half-typed names to ANONYMOUS
+	_push_pad(JOY_BUTTON_DPAD_RIGHT)
+	var right_starts_letter: bool = entering_name and name_edit.text == "A"
+	print("TEST right_starts_letter=%s" % right_starts_letter)
+	_push_pad(JOY_BUTTON_B)          # erase it — back to the classic flow
 	_push_pad(JOY_BUTTON_DPAD_UP)    # a letter appears: "A"
 	_push_pad(JOY_BUTTON_DPAD_UP)    # spun to "B"
 	_push_pad(JOY_BUTTON_A)          # X locks it — NOTHING new may appear
-	var no_ghost_a: bool = name_edit.text == "B"
+	var no_ghost_a: bool = name_edit.text == "B" and right_starts_letter
 	print("TEST pad_typed=%s no_ghost_a=%s" % [name_edit.text, no_ghost_a])
 	var not_saved_by_x: bool = entering_name
 	_push_pad(JOY_BUTTON_DPAD_UP)    # second letter appears: "BA"
@@ -1281,8 +1287,10 @@ func _die() -> void:
 		name_row.visible = true
 		if _mobile:
 			hint_label.text = "YOU SURE KNOW HOW TO JONK\nNEW HI-SCORE! TYPE YOUR NAME\nTHEN TAP SAVE"
+		elif Input.get_connected_joypads().is_empty():
+			hint_label.text = "YOU SURE KNOW HOW TO JONK\nNEW HI-SCORE! TYPE YOUR NAME\nENTER = SAVE"
 		else:
-			hint_label.text = "YOU SURE KNOW HOW TO JONK\nNEW HI-SCORE! TYPE YOUR NAME\nUP/DOWN = LETTER   X = LOCK\nX AGAIN = SAVE   CIRCLE = ERASE"
+			hint_label.text = "YOU SURE KNOW HOW TO JONK\nNEW HI-SCORE! SPELL YOUR NAME:\nUP/DOWN = SPIN LETTER   RIGHT = NEXT LETTER\nLEFT = ERASE   X = SAVE"
 		# the man himself says it too — after the crash has had its moment
 		get_tree().create_timer(0.6).timeout.connect(func() -> void:
 			if state == STATE_DEAD and praise_sfx.stream != null:
@@ -1395,7 +1403,15 @@ func _gamepad_name_input(btn: int) -> void:
 				var dir := 1 if btn == JOY_BUTTON_DPAD_UP else -1
 				var i := NAME_CHARS.find(t[-1])
 				name_edit.text = t.left(t.length() - 1) + NAME_CHARS[wrapi(i + dir, 0, NAME_CHARS.length())]
-		JOY_BUTTON_A, JOY_BUTTON_X, JOY_BUTTON_Y, JOY_BUTTON_DPAD_RIGHT, JOY_BUTTON_START:
+		JOY_BUTTON_DPAD_RIGHT:
+			# RIGHT = next letter, ALWAYS — it must never save. Players
+			# pressing RIGHT to "move on" were saving half-typed names.
+			if _pad_editing:
+				_pad_editing = false           # letter locked in
+			elif t.length() < name_edit.max_length:
+				name_edit.text = t + "A"       # start the next letter
+				_pad_editing = true
+		JOY_BUTTON_A, JOY_BUTTON_X, JOY_BUTTON_Y, JOY_BUTTON_START:
 			if _pad_editing:
 				_pad_editing = false           # letter locked in
 			else:
