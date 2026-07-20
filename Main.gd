@@ -116,13 +116,29 @@ var gameover_vbox: Control        # slides up when the virtual keyboard opens
 # ---------------------------------------------------------------------------
 # SETUP
 # ---------------------------------------------------------------------------
+func _notification(what: int) -> void:
+	# red-button / Cmd+Q on desktop: persist the window frame, then quit
+	# (auto-accept-quit was turned off so this handler gets the chance)
+	if what == NOTIFICATION_WM_CLOSE_REQUEST and not _mobile:
+		_save_settings()
+		get_tree().quit()
+
 func _size_desktop_window() -> void:
-	# the design size is 540x960 — a phone shape that opens tiny on a Mac,
-	# and window_set_size works in PHYSICAL pixels, so on a 2x Retina screen
-	# it looks half as big again. Fill 90% of the usable screen HEIGHT in
-	# that same pixel space (no point/pixel mixing), keep the 9:16 aspect,
-	# and center it. Adapts to any display instead of a fixed size.
 	var scr := DisplayServer.screen_get_usable_rect(DisplayServer.window_get_current_screen())
+	# restore the player's last window frame if it still fits the screen
+	if _has_saved_win and _saved_win_size.x >= 300 \
+			and _saved_win_size.x <= scr.size.x and _saved_win_size.y <= scr.size.y:
+		DisplayServer.window_set_size(_saved_win_size)
+		var p := _saved_win_pos
+		p.x = clampi(p.x, scr.position.x, scr.position.x + scr.size.x - _saved_win_size.x)
+		p.y = clampi(p.y, scr.position.y, scr.position.y + scr.size.y - _saved_win_size.y)
+		DisplayServer.window_set_position(p)
+		return
+	# first run (or a saved frame that no longer fits): the design size is
+	# 540x960 — a phone shape that opens tiny on a Mac, and window_set_size
+	# works in PHYSICAL pixels, so on a 2x Retina screen it looks half as big
+	# again. Fill 90% of the usable screen HEIGHT in that same pixel space
+	# (no point/pixel mixing), keep the 9:16 aspect, and center it.
 	var h := int(float(scr.size.y) * 0.9)
 	var w := int(h * 9.0 / 16.0)
 	# never wider than the screen (would only bite on an ultra-portrait display)
@@ -146,9 +162,13 @@ func _ready() -> void:
 	# ...but not in shot/play mode, which sets its own capture resolution
 	var uargs_early := OS.get_cmdline_user_args()
 	if not _mobile and not uargs_early.has("--shot") and not uargs_early.has("--play"):
-		_size_desktop_window()
+		# intercept the close so the final window frame is saved before quit
+		get_tree().set_auto_accept_quit(false)
 	_load_scores()
 	_load_settings()
+	# after settings, so a remembered window frame can be restored
+	if not _mobile and not uargs_early.has("--shot") and not uargs_early.has("--play"):
+		_size_desktop_window()
 	_build_net()
 	_build_audio()
 	_build_environment()
@@ -457,12 +477,31 @@ func _load_settings() -> void:
 	var data = JSON.parse_string(f.get_as_text())
 	f.close()
 	if typeof(data) == TYPE_DICTIONARY:
-		muted = bool(data.get("muted", false))
-		music_on = bool(data.get("music_on", false))
+		# fall back to the current value (the new on-by-default) when a key
+		# is missing, so an old settings file doesn't silence music
+		muted = bool(data.get("muted", muted))
+		music_on = bool(data.get("music_on", music_on))
+		if data.has("win_w") and data.has("win_h"):
+			_saved_win_size = Vector2i(int(data.win_w), int(data.win_h))
+			_saved_win_pos = Vector2i(int(data.get("win_x", 0)), int(data.get("win_y", 0)))
+			_has_saved_win = true
 
 func _save_settings() -> void:
+	var out := { "muted": muted, "music_on": music_on }
+	# remember the desktop window frame — but only a real windowed one, never
+	# a fullscreen or minimized size (that would become a bad default)
+	if not _mobile and get_window().mode == Window.MODE_WINDOWED:
+		out["win_w"] = DisplayServer.window_get_size().x
+		out["win_h"] = DisplayServer.window_get_size().y
+		out["win_x"] = DisplayServer.window_get_position().x
+		out["win_y"] = DisplayServer.window_get_position().y
+	elif _has_saved_win:
+		out["win_w"] = _saved_win_size.x
+		out["win_h"] = _saved_win_size.y
+		out["win_x"] = _saved_win_pos.x
+		out["win_y"] = _saved_win_pos.y
 	var f := FileAccess.open(SETTINGS_PATH, FileAccess.WRITE)
-	f.store_string(JSON.stringify({ "muted": muted, "music_on": music_on }))
+	f.store_string(JSON.stringify(out))
 	f.close()
 
 func _toggle_music() -> void:
@@ -1339,6 +1378,9 @@ var gameover_scores: Label
 var _mouse_idle := 0.0
 var _has_mouse := true
 var _mobile := false             # touch layout: real device, or --mobile flag
+var _saved_win_size := Vector2i.ZERO   # desktop window frame restored across launches
+var _saved_win_pos := Vector2i.ZERO
+var _has_saved_win := false
 
 func _input(event: InputEvent) -> void:
 	# arcade cabinets don't have a mouse arrow: the cursor only exists
