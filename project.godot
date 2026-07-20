@@ -20,6 +20,14 @@ boot_splash/stretch_mode=0
 boot_splash/use_filter=false
 config/icon="res://icon_ios.png"
 
+[audio]
+
+; "Playback" (3): game audio plays even when the iPhone/iPad mute switch
+; is on — the default "Ambient" (0) goes silent with the switch, which
+; App Review flagged as "no sound" on a muted review iPad (2.1a). Games
+; are expected to ignore the mute switch.
+general/ios/session_category=3
+
 [display]
 
 window/size/viewport_width=540
