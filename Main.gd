@@ -117,16 +117,20 @@ var gameover_vbox: Control        # slides up when the virtual keyboard opens
 # SETUP
 # ---------------------------------------------------------------------------
 func _size_desktop_window() -> void:
-	# the design size is 540x960 — a phone shape that opens tiny on a Mac
-	# (worse on Retina). Grow the window to a comfortable share of the
-	# actual screen, keep the 9:16 aspect, and center it. Screens vary, so
-	# this adapts instead of hardcoding a size that won't fit a laptop.
+	# the design size is 540x960 — a phone shape that opens tiny on a Mac,
+	# and window_set_size works in PHYSICAL pixels, so on a 2x Retina screen
+	# it looks half as big again. Fill 90% of the usable screen HEIGHT in
+	# that same pixel space (no point/pixel mixing), keep the 9:16 aspect,
+	# and center it. Adapts to any display instead of a fixed size.
 	var scr := DisplayServer.screen_get_usable_rect(DisplayServer.window_get_current_screen())
-	var h: int = int(min(float(scr.size.y) * 0.9, 1040.0))
-	var w: int = int(h * 9.0 / 16.0)
+	var h := int(float(scr.size.y) * 0.9)
+	var w := int(h * 9.0 / 16.0)
+	# never wider than the screen (would only bite on an ultra-portrait display)
+	if w > scr.size.x:
+		w = int(float(scr.size.x) * 0.9)
+		h = int(w * 16.0 / 9.0)
 	DisplayServer.window_set_size(Vector2i(w, h))
-	var pos := scr.position + (scr.size - Vector2i(w, h)) / 2
-	DisplayServer.window_set_position(pos)
+	DisplayServer.window_set_position(scr.position + (scr.size - Vector2i(w, h)) / 2)
 
 func _ready() -> void:
 	randomize()
