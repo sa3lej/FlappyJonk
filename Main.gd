@@ -91,8 +91,8 @@ var crash_sfx: AudioStreamPlayer
 var beer_sfx: AudioStreamPlayer
 var praise_sfx: AudioStreamPlayer
 var menu_music: AudioStreamPlayer
-var music_on := false            # title tune is opt-in: T toggles it
-var muted := false
+var music_on := true             # sound and music both on by default;
+var muted := false               # _load_settings restores the player's choice
 var flap_arm_l: Node3D
 var flap_arm_r: Node3D
 var _flap_pulse := 0.0
@@ -116,6 +116,18 @@ var gameover_vbox: Control        # slides up when the virtual keyboard opens
 # ---------------------------------------------------------------------------
 # SETUP
 # ---------------------------------------------------------------------------
+func _size_desktop_window() -> void:
+	# the design size is 540x960 — a phone shape that opens tiny on a Mac
+	# (worse on Retina). Grow the window to a comfortable share of the
+	# actual screen, keep the 9:16 aspect, and center it. Screens vary, so
+	# this adapts instead of hardcoding a size that won't fit a laptop.
+	var scr := DisplayServer.screen_get_usable_rect(DisplayServer.window_get_current_screen())
+	var h: int = int(min(float(scr.size.y) * 0.9, 1040.0))
+	var w: int = int(h * 9.0 / 16.0)
+	DisplayServer.window_set_size(Vector2i(w, h))
+	var pos := scr.position + (scr.size - Vector2i(w, h)) / 2
+	DisplayServer.window_set_position(pos)
+
 func _ready() -> void:
 	randomize()
 	# touch layout: real phones/tablets, or --mobile after "--" on the command
@@ -127,6 +139,10 @@ func _ready() -> void:
 	_has_mouse = DisplayServer.has_feature(DisplayServer.FEATURE_MOUSE)
 	if _has_mouse:
 		Input.mouse_mode = Input.MOUSE_MODE_HIDDEN
+	# ...but not in shot/play mode, which sets its own capture resolution
+	var uargs_early := OS.get_cmdline_user_args()
+	if not _mobile and not uargs_early.has("--shot") and not uargs_early.has("--play"):
+		_size_desktop_window()
 	_load_scores()
 	_load_settings()
 	_build_net()
